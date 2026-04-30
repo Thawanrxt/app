@@ -1,0 +1,269 @@
+"use client";
+
+import Image from "next/image";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import "./home.css";
+
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://marilou-unsinister-pseudodramatically.ngrok-free.dev";
+const MOCK_USER_ID = "00000000-0000-0000-0000-000000000001";
+
+export default function HomePage() {
+  const router = useRouter();
+  const WEATHER_API_KEY = process.env.NEXT_PUBLIC_WEATHER_API;
+  
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [activePlots, setActivePlots] = useState<any[]>([]); 
+  const [upcomingActivities, setUpcomingActivities] = useState<any[]>([]); // 🌟 เริ่มต้นเป็น Array ว่างป้องกัน Error .length
+  const [isLoading, setIsLoading] = useState(true);
+  const [weather, setWeather] = useState<any>(null);
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    const userId = localStorage.getItem("user_id") || MOCK_USER_ID;
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${WEATHER_API_KEY}&units=metric&lang=th`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            setWeather({
+              temp: Math.round(data.main.temp),
+              description: data.weather[0].description,
+              icon: data.weather[0].icon,
+            });
+          }
+        } catch (err) { console.error("Weather error:", err); }
+      });
+    }
+    try {
+      // 1. ดึงข้อมูล Dashboard
+      const dashRes = await fetch(`${API_URL}/dashboard/main/${userId}`, {
+        headers: { "ngrok-skip-browser-warning": "true" }
+      });
+      if (dashRes.ok) setDashboardData(await dashRes.json());
+
+      // 2. ดึงข้อมูล แปลงนาทั้งหมด
+      const plotsRes = await fetch(`${API_URL}/tracking/active-plans/${userId}`, {
+        headers: { "ngrok-skip-browser-warning": "true" }
+      });
+      if (plotsRes.ok) {
+        const plotsData = await plotsRes.json();
+        setActivePlots(Array.isArray(plotsData) ? plotsData : []); // 🛡️ กันเหนียวถ้าไม่ใช่ Array
+      }
+
+      // 3. ดึงกิจกรรมถัดไป (Upcoming Activities)
+      const activitiesRes = await fetch(`${API_URL}/tracking/upcoming-activities/${userId}`, {
+        headers: { "ngrok-skip-browser-warning": "true" }
+      });
+      if (activitiesRes.ok) {
+        const activitiesData = await activitiesRes.json();
+        setUpcomingActivities(Array.isArray(activitiesData) ? activitiesData : []); // 🛡️ แก้ Error .length ตรงนี้
+      }
+
+    } catch (error) {
+      console.error("ดึงข้อมูลไม่สำเร็จ:", error);
+      setActivePlots([]);
+      setUpcomingActivities([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 📍 ตรวจสอบในหน้า Home / Dashboard
+useEffect(() => {
+  const userId = localStorage.getItem("user_id"); // 🚩 เช็คว่าสะกดตรงกับตอน Login ไหม
+  if (userId) {
+    fetch(`${API_URL}/tracking/active-plans/${userId}`)
+      .then(res => res.json())
+      .then(data => setPlans(data));
+  }
+}, []);
+
+  const handleDeletePlan = async (planId: string, plotName: string) => {
+    const isConfirm = window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบแปลง "${plotName}"?`);
+    if (!isConfirm) return;
+
+    try {
+      const response = await fetch(`${API_URL}/tracking/plan/${planId}`, {
+        method: "DELETE",
+        headers: { "ngrok-skip-browser-warning": "true" }
+      });
+      if (response.ok) {
+        alert("🗑️ ลบแปลงนาสำเร็จ!");
+        fetchData(); 
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+    }
+  };
+
+  const userName = dashboardData?.full_name || "นาย สมหมาย หมายปอง";
+
+  const manuals = [
+    { title: "พันธุ์ข้าว", img: "/rice1.jpg", link: "/manual/rice" },
+    { title: "การจัดการดิน", img: "/soil.jpg", link: "/manual/soil" },
+    { title: "การใช้น้ำ", img: "/water.jpg", link: "/manual/water" },
+    { title: "การจัดการธาตุอาหาร", img: "/fertilizer.jpg", link: "/manual/fertilizer" },
+    { title: "การจัดการศัตรูพืช", img: "/bug.jpg", link: "/manual/bug" },
+    { title: "โรคข้าว", img: "/weed.jpg", link: "/manual/disease" },
+    { title: "การเก็บเกี่ยว", img: "/harvest.jpg", link: "/manual/harvest" },
+  ];
+
+  return (
+    <div className="app-wrapper">
+      <div className="phone-frame">
+        <div className="content">
+
+          {/* Header */}
+          <div className="header">
+            <div className="profile" onClick={() => router.push("/profile")}>
+              <div className="avatar">👤</div>
+              <span className="username">{userName}</span>
+            </div>
+            <div className="notify" onClick={() => router.push("/notifications")}>🔔</div>
+          </div>
+
+<div className="weather-card" onClick={() => router.push("/weather")} style={{ cursor: "pointer" }}>
+  <div className="weather-info">
+    {/* 🚩 แก้ไขบรรทัดนี้: เช็คว่า weather มีค่าจริงไหม */}
+    <span className="temp">{weather !== null ? `${weather.temp}°C` : "กำลังโหลด..."}</span>
+    <span className="desc">{weather !== null ? weather.description : "กรุณาเปิด GPS"}</span>
+  </div>
+  <div className="weather-icon">
+    {weather?.icon ? (
+      <img src={`https://openweathermap.org/img/wn/${weather.icon}@2x.png`} alt="weather" width={40} />
+    ) : "⛅"}
+  </div>
+</div>
+
+          {/* Section: แผนการปลูก */}
+          <div className="section">
+            <div className="section-header">
+              <h3>แผนการปลูก</h3>
+              <span style={{ cursor: "pointer", color: "#4CAF50" }} onClick={() => router.push("/plant-tracking")}>
+                ติดตามการปลูกข้าว ➔
+              </span>
+            </div>
+
+            {isLoading ? (
+              <div className="empty-box">กำลังโหลดข้อมูล...</div>
+            ) : (activePlots && activePlots.length > 0) ? (
+              <>
+                {activePlots.map((plot) => (
+                  <div key={plot.id} style={{ backgroundColor: "#f9fff9", border: "1px solid #4CAF50", borderRadius: "10px", padding: "15px", marginBottom: "12px", position: "relative" }}>
+                    <button 
+                      onClick={() => handleDeletePlan(plot.id, plot.plot_name)}
+                      style={{ position: "absolute", top: "12px", right: "12px", background: "none", border: "none", color: "#e53935", fontSize: "16px", cursor: "pointer" }}
+                    >
+                      🗑️
+                    </button>
+                    <div style={{ marginBottom: "15px" }}>
+                      <h4 style={{ margin: "0 0 5px 0", color: "#2e7d32", fontSize: "18px" }}>🌾 แปลง: {plot.plot_name}</h4>
+                      <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>ขนาดพื้นที่: {plot.area}</p>
+                    </div>
+                    <button className="primary-btn" onClick={() => router.push(`/plant-tracking/${plot.id}`)} style={{ width: "100%", padding: "12px", borderRadius: "8px" }}>
+                      📝 บันทึกกิจกรรมแปลงนี้
+                    </button>
+                  </div>
+                ))}
+                <button onClick={() => router.push("/create-plan")} className="add-plot-btn-dashed" style={{ width: "100%", padding: "12px", border: "2px dashed #4CAF50", color: "#4CAF50", borderRadius: "8px", background: "none", fontWeight: "bold", cursor: "pointer" }}>
+                  + เพิ่มแปลงใหม่
+                </button>
+              </>
+            ) : (
+              <div className="banner" onClick={() => router.push("/create-plan")} style={{ cursor: "pointer", position: "relative", height: "120px", borderRadius: "10px", overflow: "hidden" }}>
+                <Image src="/rice-banner.jpg" alt="plant" fill style={{ objectFit: "cover" }} />
+                <div className="banner-overlay" style={{ position: "absolute", bottom: 0, width: "100%", padding: "10px", background: "rgba(0,0,0,0.5)", textAlign: "center", color: "#fff" }}>
+                   + เริ่มแผนการปลูกแรกของคุณ
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 🌟 Section: กิจกรรมที่ต้องทำถัดไป 🌟 */}
+          <div className="section">
+            <h3>กิจกรรมถัดไปที่ต้องทำ</h3>
+            
+            {isLoading ? (
+              <div className="empty-box">กำลังโหลด...</div>
+            ) : (upcomingActivities && upcomingActivities.length > 0) ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {upcomingActivities.map((task, index) => (
+                  <div 
+                    key={index}
+                    className="activity-card" 
+                    style={{ display: "flex", justifyContent: "space-between", padding: "12px", backgroundColor: "#fff", border: "1px solid #eee", borderRadius: "8px", cursor: "pointer" }}
+                    onClick={() =>router.push(`/plant-tracking/${task.plan_id}?type=${task.activity_type_id}`)}
+                  >
+
+                    <div>
+                      <div style={{ fontWeight: "600", color: "#333" }}>{task.activity_name}</div>
+                      <div style={{ fontSize: "12px", color: "#666" }}>🌾 แปลง: {task.plot_name}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ color: task.days_left <= 0 ? "#d32f2f" : "#2e7d32", fontWeight: "bold", fontSize: "14px" }}>
+                        {task.days_left === 0 ? "วันนี้" : task.days_left < 0 ? "เลยกำหนด" : `อีก ${task.days_left} วัน`}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#999" }}>{task.due_date}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-box">ไม่พบข้อมูลกิจกรรมที่ต้องทำในช่วงนี้</div>
+            )}
+          </div>
+
+          {/* Manuals */}
+          <div className="section">
+            <h3>คู่มือเกษตร</h3>
+
+            <div className="manual-list">
+              {manuals.map((manual, index) => (
+                <div
+                  key={index}
+                  className="manual-card"
+                  onClick={() => router.push(manual.link)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <Image
+                    src={manual.img}
+                    alt={manual.title}
+                    fill
+                    style={{ objectFit: "cover" }}
+                  />
+
+                  <div
+                    className={`manual-overlay ${
+                      index % 2 === 0 ? "left" : "right"
+                    }`}
+                  >
+                    <div className="manual-label">
+                      {manual.title}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Bottom Nav */}
+        <div className="bottom-nav">
+          <div className="nav-item active" onClick={() => router.push("/home")}>🏠<span>หน้าหลัก</span></div>
+          <div className="nav-item" onClick={() => router.push("/weather")}>☀️<span>อากาศ</span></div>
+          <div className="nav-item" onClick={() => router.push("/map")}>🗺️<span>แผนที่</span></div>
+          <div className="nav-item" onClick={() => router.push("/reports")}>👥<span>รายงาน</span></div>
+          <div className="nav-item" onClick={() => router.push("/settings")}>⚙️<span>ตั้งค่า</span></div>
+        </div>
+
+      </div>
+    </div>
+  );
+}

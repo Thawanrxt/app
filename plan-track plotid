@@ -1,0 +1,520 @@
+"use client";
+
+import Image from "next/image";
+import { useRef, useState, useEffect, Suspense } from "react"; // ✨ เพิ่ม Suspense ตรงนี้
+import { useParams, useRouter, useSearchParams } from "next/navigation"; // ✨ เพิ่ม useSearchParams ตรงนี้
+import { Camera, ChevronDown, FolderOpen, ImageIcon, Plus } from "lucide-react";
+import styles from "./plot-detail.module.css";
+
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+type PickerTarget = "left" | "right" | null;
+
+type ActivityEntry =
+  | { type: "group"; label: string }
+  | { type: "option"; label: string; value: string };
+
+const activityOptions: ActivityEntry[] = [
+  { type: "group", label: "เตรียมดิน" },
+  { type: "option", label: "ปรับ land leveling", value: "เตรียมดิน - ปรับ land leveling" },
+  { type: "option", label: "ไม่ปรับ land leveling", value: "เตรียมดิน - ไม่ปรับ land leveling" },
+  { type: "option", label: "การจัดการน้ำ", value: "การจัดการน้ำ" },
+  { type: "option", label: "หว่านปุ๋ย", value: "หว่านปุ๋ย" },
+  { type: "option", label: "จัดการศัตรูพืช", value: "จัดการศัตรูพืช" },
+  { type: "option", label: "โรคพืช", value: "โรคพืช" },
+  { type: "option", label: "การเก็บเกี่ยว", value: "การเก็บเกี่ยว" },
+  { type: "option", label: "การขายข้าว", value: "การขายข้าว" },
+];
+
+const defaultMethodOptions = ["ไถดะ", "ไถพรวน", "ปรับเทือก"];
+const waterMethodOptions = ["เปียกสลับแห้ง(AWD)"];
+const fertilizerMethodOptions = ["หว่านด้วยคน", "หว่านปุ๋ยด้วยโดรน"];
+
+function PlotTrackingContent() {
+  const router = useRouter();
+  const params = useParams<{ plotId: string }>();
+  const planIdFromUrl = decodeURIComponent(params.plotId || "");
+  const searchParams = useSearchParams();
+  const targetType = searchParams.get("type");
+  console.log("เช็คค่า Type จาก URL:", targetType);
+  // --- Common States ---
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [methodOpen, setMethodOpen] = useState(false);
+  const [activity, setActivity] = useState("");
+  const [method, setMethod] = useState("");
+  const [operator, setOperator] = useState("");
+  const [activityDate, setActivityDate] = useState(new Date().toISOString().split("T")[0]);
+  const [issueText, setIssueText] = useState("");
+  const [roundNo, setRoundNo] = useState("1");
+  const [isSaving, setIsSaving] = useState(false);
+  useEffect(() => {
+    if (targetType) {
+      const typeMap: Record<string, string> = {
+        "1": "เตรียมดิน - ปรับ land leveling",
+        "2": "การจัดการน้ำ",
+        "3": "หว่านปุ๋ย",
+        "4": "จัดการศัตรูพืช",
+        "5": "โรคพืช",
+        "6": "การเก็บเกี่ยว",
+        "7": "การขายข้าว"
+      };
+
+      const selectedName = typeMap[targetType];
+      if (selectedName) {
+        setActivity(selectedName); // สั่งเปลี่ยนชื่อกิจกรรมในหน้าจอ
+        console.log("Auto-selected:", selectedName);
+      }
+    }
+  }, [targetType]);
+  // --- Specific States ---
+  // เตรียมดิน
+  const [strawBurning, setStrawBurning] = useState<"burn" | "no-burn" | "">("");
+  const [soilPh, setSoilPh] = useState("");
+  const [soilNpk, setSoilNpk] = useState("");
+  const [soilOrganicMatter, setSoilOrganicMatter] = useState("");
+  // การจัดการน้ำ
+  const [waterLevel, setWaterLevel] = useState<"above-5" | "below-10" | "below-15" | "">("");
+  // หว่านปุ๋ย
+  const [fertilizerType, setFertilizerType] = useState("");
+  const [fertilizerAmount, setFertilizerAmount] = useState("");
+  // ศัตรูพืช / โรคพืช
+  const [pestType, setPestType] = useState("");
+  const [chemicalName, setChemicalName] = useState("");
+  const [chemicalAmount, setChemicalAmount] = useState("");
+  const [chemicalUnit, setChemicalUnit] = useState("มล.");
+  const [ratioPerWater, setRatioPerWater] = useState("");
+  // การเก็บเกี่ยว (อ้างอิง image_4b1266.png)
+  const [harvestStartDate, setHarvestStartDate] = useState("");
+  const [harvestEndDate, setHarvestEndDate] = useState("");
+  const [totalYield, setTotalYield] = useState("");
+  const [moisture, setMoisture] = useState("");
+  // การขายข้าว (อ้างอิง image_4b1248.png / image_49a362.png)
+  const [millName, setMillName] = useState("");
+  const [productName, setProductName] = useState("");
+  const [netWeight, setNetWeight] = useState("");
+  const [totalIncome, setTotalIncome] = useState("");
+  const [pricePerKg, setPricePerKg] = useState("");
+
+  // --- UI & Image States ---
+  const [imagePickerOpen, setImagePickerOpen] = useState<PickerTarget>(null);
+  const [leftImageUrl, setLeftImageUrl] = useState<string | null>(null);
+  const [rightImageUrl, setRightImageUrl] = useState<string | null>(null);
+  const leftGalleryRef = useRef<HTMLInputElement>(null);
+  const leftCameraRef = useRef<HTMLInputElement>(null);
+  const leftFileRef = useRef<HTMLInputElement>(null);
+  const rightGalleryRef = useRef<HTMLInputElement>(null);
+  const rightCameraRef = useRef<HTMLInputElement>(null);
+  const rightFileRef = useRef<HTMLInputElement>(null);
+
+  const applyImage = (target: Exclude<PickerTarget, null>, file?: File | null) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    if (target === "left") setLeftImageUrl(url);
+    if (target === "right") setRightImageUrl(url);
+    setImagePickerOpen(null);
+  };
+  
+  const currentPicker = imagePickerOpen === "left"
+    ? { gallery: leftGalleryRef, camera: leftCameraRef, file: leftFileRef, target: "left" as const }
+    : { gallery: rightGalleryRef, camera: rightCameraRef, file: rightFileRef, target: "right" as const };
+
+  const isWaterManagementActivity = activity.includes("การจัดการน้ำ");
+  const isFertilizerActivity = activity.includes("หว่านปุ๋ย");
+  const isPestActivity = activity.includes("จัดการศัตรูพืช");
+  const isDiseaseActivity = activity.includes("โรคพืช");
+  const isLandLevelingActivity = activity.includes("เตรียมดิน");
+  const isHarvestActivity = activity === "การเก็บเกี่ยว";
+  const isSaleActivity = activity === "การขายข้าว";
+
+  const methodOptions = isWaterManagementActivity
+    ? waterMethodOptions
+    : isFertilizerActivity
+    ? fertilizerMethodOptions
+    : defaultMethodOptions;
+
+  const handleSaveActivity = async () => {
+    if (!activity) { alert("กรุณาเลือกกิจกรรมก่อนบันทึก"); return; }
+    setIsSaving(true);
+
+    try {
+        let payload: any = {
+            plan_id: planIdFromUrl,
+            performed_by_name: operator || "ไม่ระบุ",
+            performed_at: activityDate,
+            issue_found: issueText
+        };
+
+          if (isLandLevelingActivity) {
+            payload = { ...payload, type_id: 1, straw_burning: strawBurning, soil_ph: soilPh };
+        } else if (isWaterManagementActivity) {
+            payload = { ...payload, type_id: 2, water_level: waterLevel };
+        } else if (isFertilizerActivity) {
+            payload = { ...payload, type_id: 3, fertilizer_type: fertilizerType, amount: fertilizerAmount };
+        } else if (isPestActivity) {
+            payload = { ...payload, type_id: 4, pest_type: pestType };
+        } else if (isDiseaseActivity) {
+            payload = { ...payload, type_id: 5, disease_type: pestType };
+        } else if (isHarvestActivity) {
+            // 🌾 เพิ่มเติมค่าสำหรับการเก็บเกี่ยว (ID: 6)
+            payload = { ...payload, type_id: 6, yield_kg: totalYield, moisture: moisture, start_date: harvestStartDate, end_date: harvestEndDate };
+        } else if (isSaleActivity) {
+            // 💰 เพิ่มเติมค่าสำหรับการขายข้าว (ID: 7)
+            payload = { ...payload, type_id: 7, total_income: totalIncome, price_per_kg: pricePerKg, mill_name: millName };
+        }
+
+      const response = await fetch(`${API_URL}/activities/save`, { 
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+      if (!response.ok) throw new Error("บันทึกไม่สำเร็จ");
+      alert("✅ บันทึกกิจกรรมเรียบร้อยแล้ว!");
+      router.push("/plant-tracking");
+    } catch (error: any) {
+      alert(`❌ เกิดข้อผิดพลาด: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <button className={styles.backBtn} onClick={() => router.push("/plant-tracking")}>
+    ‹
+  </button>
+        <h1>ติดตามการปลูกข้าว</h1>
+      </header>
+
+<main className={styles.content}>
+        {/* 1. แถบกิจกรรมกับครั้งที่ (บนสุด) */}
+        <section className={styles.selectorSection}>
+          <div className={styles.selectorCard}>
+            <h2>กิจกรรม</h2>
+            <button className={styles.selectorButton} onClick={() => { setActivityOpen(!activityOpen); setMethodOpen(false); }}>
+              <span>{activity || "เลือกกิจกรรม"}</span>
+              <ChevronDown size={22} className={activityOpen ? styles.chevronOpen : ""} />
+            </button>
+            {activityOpen && (
+              <div className={styles.dropdown}>
+                {activityOptions.map((entry, idx) =>
+                  entry.type === "group" ? (
+                    <div key={idx} className={styles.groupTitle}>{entry.label}</div>
+                  ) : (
+                    <button key={idx} onClick={() => { setActivity(entry.value); setActivityOpen(false); }}>{entry.label}</button>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.selectorCard}>
+            <h2>{isPestActivity || isDiseaseActivity || isHarvestActivity || isSaleActivity ? "ครั้งที่" : "วิธีการ"}</h2>
+            {isPestActivity || isDiseaseActivity || isHarvestActivity || isSaleActivity ? (
+              <div style={{ backgroundColor: "#2e7d32", color: "#fff", padding: "10px", borderRadius: "8px", textAlign: "center", fontWeight: "bold", fontSize: "18px", marginTop: "5px" }}>
+                {roundNo}
+              </div>
+            ) : (
+              <>
+                <button className={styles.selectorButton} onClick={() => { setMethodOpen(!methodOpen); setActivityOpen(false); }}>
+                  <span>{method || "เลือกวิธีการ"}</span>
+                  <ChevronDown size={22} className={methodOpen ? styles.chevronOpen : ""} />
+                </button>
+                {methodOpen && (
+                  <div className={styles.dropdown}>
+                    {methodOptions.map((o, idx) => <button key={idx} onClick={() => { setMethod(o); setMethodOpen(false); }}>{o}</button>)}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+        {(isHarvestActivity || isSaleActivity || isPestActivity || isDiseaseActivity || isLandLevelingActivity || isWaterManagementActivity || isFertilizerActivity) && (
+        <h3 style={{ marginTop: "20px", marginBottom: "10px", fontWeight: "bold" }}>
+        {isHarvestActivity ? "อัปโหลดรูปภาพการเก็บเกี่ยว" : 
+        isSaleActivity ? "อัปโหลดใบเสร็จขายข้าว" : 
+        isPestActivity ? "อัปโหลดรูปภาพการจัดการศัตรูพืช" : 
+        isDiseaseActivity ? "อัปโหลดรูปภาพโรคพืช" : 
+        isLandLevelingActivity ? "อัปโหลดรูปภาพการเตรียมดิน" : 
+        isWaterManagementActivity ? "อัปโหลดรูปภาพการจัดการน้ำ" : 
+        isFertilizerActivity ? "อัปโหลดรูปภาพการหว่านปุ๋ย" : 
+        "อัปโหลดรูปภาพกิจกรรม"}
+      </h3>
+        )}
+
+        {imagePickerOpen && (
+          <section className={styles.imageMenu}>
+            <button onClick={() => currentPicker.gallery.current?.click()}><ImageIcon size={20} /> คลังรูปภาพ</button>
+            <button onClick={() => currentPicker.camera.current?.click()}><Camera size={20} /> ถ่ายภาพ</button>
+            <button onClick={() => currentPicker.file.current?.click()}><FolderOpen size={20} /> เลือกไฟล์</button>
+          </section>
+        )}
+
+        <div style={{ display: "none" }}>
+          <input ref={leftGalleryRef} type="file" accept="image/*" onChange={(e) => applyImage("left", e.target.files?.[0])} />
+          <input ref={leftCameraRef} type="file" accept="image/*" capture="environment" onChange={(e) => applyImage("left", e.target.files?.[0])} />
+          <input ref={leftFileRef} type="file" onChange={(e) => applyImage("left", e.target.files?.[0])} />
+          <input ref={rightGalleryRef} type="file" accept="image/*" onChange={(e) => applyImage("right", e.target.files?.[0])} />
+          <input ref={rightCameraRef} type="file" accept="image/*" capture="environment" onChange={(e) => applyImage("right", e.target.files?.[0])} />
+          <input ref={rightFileRef} type="file" onChange={(e) => applyImage("right", e.target.files?.[0])} />
+        </div>
+
+        <section className={styles.imagesRow}>
+          <button className={styles.imageUpload} onClick={() => setImagePickerOpen("left")}>
+            {leftImageUrl ? <Image src={leftImageUrl} alt="1" fill style={{objectFit:"cover"}} /> : <Plus size={60} color="#8f8f8f" />}
+          </button>
+          <button className={styles.imageUpload} onClick={() => setImagePickerOpen("right")}>
+            {rightImageUrl ? <Image src={rightImageUrl} alt="2" fill style={{objectFit:"cover"}} /> : <Plus size={60} color="#8f8f8f" />}
+          </button>
+        </section>
+
+        <div style={{ display: "none" }}>
+          <input ref={leftGalleryRef} type="file" accept="image/*" onChange={(e) => applyImage("left", e.target.files?.[0])} />
+          <input ref={leftCameraRef} type="file" accept="image/*" capture="environment" onChange={(e) => applyImage("left", e.target.files?.[0])} />
+          <input ref={leftFileRef} type="file" onChange={(e) => applyImage("left", e.target.files?.[0])} />
+          <input ref={rightGalleryRef} type="file" accept="image/*" onChange={(e) => applyImage("right", e.target.files?.[0])} />
+          <input ref={rightCameraRef} type="file" accept="image/*" capture="environment" onChange={(e) => applyImage("right", e.target.files?.[0])} />
+          <input ref={rightFileRef} type="file" onChange={(e) => applyImage("right", e.target.files?.[0])} />
+        </div>
+
+        <section className={styles.formSection}>
+          <h3 style={{ marginBottom: "15px" }}>รายละเอียด</h3>
+
+          
+            <>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>ผู้ทำกิจกรรม</label>
+                <input value={operator} onChange={(e) => setOperator(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+              </div>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>วันที่ทำกิจกรรม</label>
+                <input type="date" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+              </div>
+            </>
+          
+
+          {isLandLevelingActivity && (
+            <div style={{ background: "#f9f9f9", padding: "15px", borderRadius: "12px", marginBottom: "20px", border: "1px solid #e0e0e0" }}>
+              <label style={{ fontWeight: "bold", display: "block", marginBottom: "10px" }}>การเผาฟาง</label>
+              <div style={{ display: "flex", gap: "30px", marginBottom: "15px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px" }}><input type="radio" name="straw" value="burn" checked={strawBurning === "burn"} onChange={() => setStrawBurning("burn")} /> เผา</label>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px" }}><input type="radio" name="straw" value="no-burn" checked={strawBurning === "no-burn"} onChange={() => setStrawBurning("no-burn")} /> ไม่เผา</label>
+              </div>
+              <label style={{ fontWeight: "bold", display: "block", marginBottom: "10px" }}>ผลการตรวจดิน</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                <input placeholder="ค่า pH" value={soilPh} onChange={(e) => setSoilPh(e.target.value)} style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc" }} />
+                <input placeholder="N-P-K" value={soilNpk} onChange={(e) => setSoilNpk(e.target.value)} style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc" }} />
+                <input placeholder="อินทรียวัตถุ" value={soilOrganicMatter} onChange={(e) => setSoilOrganicMatter(e.target.value)} style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc" }} />
+              </div>
+            </div>
+          )}
+
+          {isWaterManagementActivity && (
+            <div style={{ background: "#f9f9f9", padding: "15px", borderRadius: "12px", marginBottom: "20px", border: "1px solid #e0e0e0" }}>
+              <label style={{ fontWeight: "bold", display: "block", marginBottom: "10px" }}>ขังน้ำในแปลง</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "10px" }}><input type="radio" name="water" value="above-5" checked={waterLevel === "above-5"} onChange={() => setWaterLevel("above-5")} /> ขังน้ำเหนือพื้นดิน 5 ชม.</label>
+                <label style={{ display: "flex", alignItems: "center", gap: "10px" }}><input type="radio" name="water" value="below-10" checked={waterLevel === "below-10"} onChange={() => setWaterLevel("below-10")} /> ต่ำกว่าพื้นดิน 10 ชม.</label>
+                <label style={{ display: "flex", alignItems: "center", gap: "10px" }}><input type="radio" name="water" value="below-15" checked={waterLevel === "below-15"} onChange={() => setWaterLevel("below-15")} /> ต่ำกว่าพื้นดิน 15 ชม.</label>
+              </div>
+            </div>
+          )}
+
+          {isFertilizerActivity && (
+            <div style={{ background: "#f9f9f9", padding: "15px", borderRadius: "12px", marginBottom: "20px", border: "1px solid #e0e0e0" }}>
+              <label style={{ fontWeight: "bold", display: "block", marginBottom: "10px" }}>ประเภทปุ๋ย</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "15px" }}>
+                {["46-0-0", "0-0-60", "16-20-0", "ปุ๋ยอินทรีย์"].map((type) => (
+                  <label key={type} style={{ display: "flex", alignItems: "center", gap: "8px" }}><input type="radio" name="fert" value={type} checked={fertilizerType === type} onChange={() => setFertilizerType(type)} /> {type}</label>
+                ))}
+              </div>
+              <label style={{ fontWeight: "bold", display: "block", marginBottom: "5px" }}>ปริมาณที่ใช้</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <input type="number" value={fertilizerAmount} onChange={(e) => setFertilizerAmount(e.target.value)} placeholder="ระบุจำนวน" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+                <span style={{ fontWeight: "bold" }}>กิโลกรัม/ไร่</span>
+              </div>
+            </div>
+          )}
+
+          {(isPestActivity || isDiseaseActivity) && (
+            <>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>ประเภท{isPestActivity ? "ศัตรูพืช" : "โรคพืช"}</label>
+                <input value={pestType} onChange={(e) => setPestType(e.target.value)} placeholder={isPestActivity ? "เช่น เพลี้ยกระโดด" : "เช่น โรคไหม้"} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+              </div>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>ชื่อสามัญสารเคมี</label>
+                <input value={chemicalName} onChange={(e) => setChemicalName(e.target.value)} placeholder="ชื่อยาที่ใช้" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+              </div>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>ปริมาณที่ใช้</label>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <input type="number" value={chemicalAmount} onChange={(e) => setChemicalAmount(e.target.value)} placeholder="ปริมาณ" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+                  <select value={chemicalUnit} onChange={(e) => setChemicalUnit(e.target.value)} style={{ width: "100px", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }}>
+                    <option value="มล.">มล.</option><option value="ซีซี">ซีซี</option><option value="กรัม">กรัม</option>
+                  </select>
+                </div>
+              </div>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>อัตราส่วนต่อน้ำ (ลิตร)</label>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <input type="number" value={ratioPerWater} onChange={(e) => setRatioPerWater(e.target.value)} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+                  <span style={{ fontWeight: "bold" }}>ลิตร</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isHarvestActivity && (
+            <>
+              <h3 style={{ marginTop: "10px", marginBottom: "15px" }}>ข้อมูลการเก็บเกี่ยว</h3>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>วันที่เริ่มการเก็บเกี่ยว</label>
+                <input type="date" value={harvestStartDate} onChange={(e) => setHarvestStartDate(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+              </div>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>วันที่สิ้นสุดการเก็บเกี่ยว</label>
+                <input type="date" value={harvestEndDate} onChange={(e) => setHarvestEndDate(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+              </div>
+              <h3 style={{ marginTop: "10px", marginBottom: "15px" }}>สรุปผลการเก็บเกี่ยว</h3>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>ผลการผลิต (กิโลกรัม)</label>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <input type="number" value={totalYield} onChange={(e) => setTotalYield(e.target.value)} placeholder="ปริมาณ" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+                  <span style={{ fontWeight: "bold" }}>กิโลกรัม</span>
+                </div>
+              </div>
+              <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+                <label>ความชื้นของข้าวเปลือกสด (%)</label>
+                <input type="number" value={moisture} onChange={(e) => setMoisture(e.target.value)} placeholder="ระบุ % ความชื้น" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+              </div>
+            </>
+          )}
+
+          {/* 💰 6. การขายข้าว (ปรับปรุงตาม image_3d63e8.png) */}
+{isSaleActivity && (
+  <>
+  
+    <h3 style={{ marginTop: "10px", marginBottom: "15px" }}>ข้อมูลหลังขายเข้าโรงสี</h3>
+    
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>โรงสี</label>
+      <input value={millName} onChange={(e) => setMillName(e.target.value)} placeholder="ระบุชื่อโรงสี" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>ชื่อสินค้า</label>
+      <input value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="ระบุชื่อสินค้า" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>วันที่</label>
+      <input type="date" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>คันที่</label>
+      <input placeholder="ระบุรายละเอียดเพิ่มเติม" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>เลขที่</label>
+      <input placeholder="ระบุรายละเอียดเพิ่มเติม" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>ทะเบียน </label>
+      <input placeholder="ระบุทะเบียน" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>รายการ</label>
+      <input placeholder="ระบุรายการ" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+    </div>
+
+{/* 🌟 แสดงเฉพาะเวลาเท่านั้น */}
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>เวลาที่ขาย</label>
+      <input 
+        type="time" 
+        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} 
+      />
+    </div>
+
+
+    {/* แถวข้อมูลตัวเลขแบบมีหน่วยด้านหลังตามรูปภาพ */}
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>ผลการผลิต</label>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <input type="number" placeholder="0.00" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+        <span style={{ fontWeight: "bold", minWidth: "65px" }}>กิโลกรัม</span>
+      </div>
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>น้ำหนัก</label>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <input type="number" placeholder="0.00" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+        <span style={{ fontWeight: "bold", minWidth: "65px" }}>กิโลกรัม</span>
+      </div>
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>น้ำหนักสินค้าสุทธิ</label>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <input type="number" value={netWeight} onChange={(e) => setNetWeight(e.target.value)} placeholder="0.00" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+        <span style={{ fontWeight: "bold", minWidth: "65px" }}>กิโลกรัม</span>
+      </div>
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>รวมรายได้</label>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <input type="number" value={totalIncome} onChange={(e) => setTotalIncome(e.target.value)} placeholder="0.00" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontWeight: "bold", color: "#2e7d32" }} />
+        <span style={{ fontWeight: "bold", minWidth: "65px" }}>บาท</span>
+      </div>
+    </div>
+
+    <div className={styles.formRow} style={{ marginBottom: "15px" }}>
+      <label>ราคาต่อ กก. </label>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <input type="number" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value)} placeholder="0.00" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }} />
+        <span style={{ fontWeight: "bold", minWidth: "65px" }}>บาท</span>
+      </div>
+    </div>
+
+  </>
+)}
+
+          <div className={styles.formColumn} style={{ marginBottom: "20px", marginTop: "15px" }}>
+            <label>{isHarvestActivity ? "ปัญหาที่พบระหว่างการเก็บเกี่ยว" : "ปัญหาที่เจอ / หมายเหตุ"}</label>
+            <textarea value={issueText} onChange={(e) => setIssueText(e.target.value)} placeholder="ระบุปัญหาที่พบ" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", minHeight: "80px" }} />
+          </div>
+
+          <div className={styles.actionRow} style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+            <button className={styles.saveBtn} onClick={handleSaveActivity} disabled={isSaving} style={{ flex: 1, backgroundColor: "#2e7d32", color: "white", padding: "12px", borderRadius: "8px", border: "none", fontWeight: "bold", fontSize: "16px" }}>
+              {isSaving ? "กำลังบันทึก..." : "บันทึก"}
+            </button>
+            <button className={styles.editBtn} style={{ flex: 1, backgroundColor: "#e0e0e0", color: "#333", padding: "12px", borderRadius: "8px", border: "none", fontWeight: "bold", fontSize: "16px" }}>
+              แก้ไข
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+    
+  );
+}
+export default function PlotTrackingDetailPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        กำลังโหลดข้อมูล...
+      </div>
+    }>
+      <PlotTrackingContent />
+    </Suspense>
+  );
+}
