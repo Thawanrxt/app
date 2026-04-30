@@ -1,0 +1,34 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class WaterTrackingActivity extends Model
+{
+    protected $fillable = [
+        'farmer_name',
+        'plot_code',
+        'round_number',
+        'activity_name',
+        'method',
+        'activity_date',
+        'water_level',
+        'details',
+        'issue_found',
+        'image_url',
+        'status',
+        'reviewed_by',
+        'reviewed_at',
+        'admin_note',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'activity_date' => 'date',
+            'reviewed_at' => 'datetime',
+            'round_number' => 'integer',
+        ];
+    }
+}
