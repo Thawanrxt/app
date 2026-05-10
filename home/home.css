@@ -1,0 +1,250 @@
+.app-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;   
+  background: #000;
+  height: 100vh;         
+  padding: 0;            
+}
+
+.phone-frame {
+  width: 390px;
+  background: #f8f8f8;
+  border-radius: 35px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+
+.content {
+  padding: 20px;
+  padding-bottom: 100px;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 45px;
+  height: 45px;
+  background: #eee; /* สีพื้นหลังเผื่อรูปไม่โหลด */
+  border-radius: 50%;
+  overflow: hidden; /* บังคับให้รูปที่ล้นออกมาถูกตัดเป็นวงกลม */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #e8f5e9; /* เส้นขอบอ่อนๆ ให้ดูมีมิติ */
+}
+
+.username {
+  font-weight: bold;
+}
+
+.notify {
+  background: #2e7d32;
+  color: white;
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* Weather */
+.weather-card {
+  background: #dcedc8;
+  border-radius: 12px;
+  padding: 12px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  font-size: 14px;
+}
+
+/* Sections */
+.section {
+  margin-bottom: 30px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.section-header span {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Banner */
+.banner {
+  position: relative;
+  height: 140px;
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.primary-btn {
+  background: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* Empty Box */
+.empty-box {
+  background: #f0f0f0;
+  padding: 30px;
+  border-radius: 12px;
+  text-align: center;
+  color: #777;
+  font-size: 14px;
+}
+
+/* Manuals */
+.manual-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.manual-card {
+  position: relative;
+  height: 100px;
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.manual-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  padding-left: 20px;
+}
+
+.manual-label {
+  background: white;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+}
+
+/* Bottom Nav */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 0 20px;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
+}
+
+.nav-item span {
+  margin-top: 4px;
+}
+
+.nav-item.active {
+  color: #2e7d32;
+  font-weight: bold;
+}
+.manual-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+}
+
+/* ฝั่งซ้าย */
+.manual-overlay.left {
+  justify-content: flex-start;
+}
+
+/* ฝั่งขวา */
+.manual-overlay.right {
+  justify-content: flex-end;
+}
+
+.manual-label {
+  background: white;
+  padding: 8px 18px;
+  border-radius: 25px;
+  font-weight: bold;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.track-link {
+  color: #2e7d32;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.track-link:hover {
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
+.temp {
+  font-size: 18px;      /* ปรับเพิ่มขนาด (เดิมอาจจะแค่ 16-18) */
+  font-weight: 800;      /* ทำให้ตัวหนาเป็นพิเศษ */
+  color: #000000;       /* เปลี่ยนเป็นสีเขียวเข้มให้เข้ากับธีมแอป */
+  margin-right: 8px;     /* เว้นระยะห่างจากตัวหนังสือด้านหลัง */
+}
+
+/* ส่วนของข้อความ "เมฆเล็กน้อย" */
+.desc {
+  font-size: 18px;      /* ปรับให้ใหญ่ขึ้นตามตัวเลข */
+  font-weight: 600;      /* ความหนาระดับปานกลาง */
+  color: #444;          /* สีเทาเข้มเพื่อให้สบายตา */
+}
+
+/* ส่วนของ Weather Card (แถบสีเขียวอ่อน) */
+.weather-card {
+  padding: 20px 24px;   /* เพิ่ม Padding เพื่อให้แถบขยายใหญ่ขึ้นตามตัวหนังสือ */
+  display: flex;
+  align-items: center;  /* จัดให้ตัวหนังสือกับไอคอนอยู่กึ่งกลางแถวเดียวกัน */
+  justify-content: space-between;
+}

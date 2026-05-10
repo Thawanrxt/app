@@ -1,0 +1,131 @@
+"use client";
+
+import { useEffect, useState, Suspense } from "react"; // เพิ่ม Suspense ครอบเพื่อให้ใช้งาน useSearchParams ได้ไม่มีปัญหา
+import { useRouter, useSearchParams } from "next/navigation";
+import { UserRound, BellRing, AlertTriangle, Lightbulb } from "lucide-react";
+import styles from "./notifications.module.css";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+function NotificationsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const from = searchParams.get("from"); // รับค่าจาก URL เช่น ?from=settings
+
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // 🚩 ฟังก์ชันจัดการปุ่มย้อนกลับ
+  const handleBack = () => {
+    if (from === "settings") {
+      router.push("/settings"); // หรือ path หน้าตั้งค่า/โปรไฟล์ของคุณ
+    } else {
+      router.push("/home");
+    }
+  };
+
+  const handleNotiClick = async (notiId: string, plotId: string, typeId: string) => {
+    try {
+      // 🚩 1. ส่งไปบอก Backend ว่าอ่านแล้ว (ใช้ notiId ที่เพิ่มเข้ามา)
+      await fetch(`${API_URL}/notifications/${notiId}/read`, {
+        method: "PATCH",
+        headers: { "ngrok-skip-browser-warning": "true" }
+      });
+
+      // 🚩 2. อัปเดต UI ทันทีไม่ต้องรอโหลดใหม่
+      setNotifications(prev => 
+        prev.map(n => n.id === notiId ? { ...n, is_read: true } : n)
+      );
+
+      // 🚩 3. ถ้ามีข้อมูลนำทาง ให้ไปหน้าจัดการแปลง
+      if (plotId && typeId) {
+        router.push(`/plant-tracking/${plotId}?type=${typeId}`);
+      }
+    } catch (err) {
+      console.error("Update error:", err);
+      if (plotId && typeId) router.push(`/plant-tracking/${plotId}?type=${typeId}`);
+    }
+  };
+
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      const userId = localStorage.getItem("user_id");
+      if (!userId) {
+        router.push("/login");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/notifications/${userId}`, {
+          headers: { "ngrok-skip-browser-warning": "true" }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setNotifications(data);
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchNotifs();
+  }, [router]);
+
+  return (
+    <div className={styles.page}>
+      <header className={styles.header}>
+        {/* 🚩 แก้ไข: เปลี่ยน onClick ให้เรียกใช้ handleBack */}
+        <button className={styles.backBtn} onClick={handleBack}> ‹ </button>
+        <h1>แจ้งเตือน</h1>
+      </header>
+
+      <main className={styles.content}>
+        {loading ? (
+          <div className={styles.emptyText}>กำลังดึงข้อมูล...</div>
+        ) : notifications.length > 0 ? (
+          notifications.map((item) => (
+            <article 
+              key={item.id} 
+              className={`${styles.card} ${item.type === 'urgent' ? styles.urgent : ''}`}
+              onClick={() => handleNotiClick(item.id, item.plot_id, item.target_type)}
+              style={{ cursor: "pointer" }} 
+            >
+              <div className={styles.avatarWrap}>
+                {item.type === "urgent" ? (
+                  <BellRing size={32} color="#ff9800" />
+                ) : item.type === "warning" ? (
+                  <AlertTriangle size={32} color="#f44336" />
+                ) : item.type === "advice" ? (
+                  <Lightbulb size={32} color="#1976d2" />
+                ) : (
+                  <UserRound size={32} color="#2e7d32" />
+                )}
+              </div>
+
+              <div className={styles.messageBody}>
+                <h2>{item.title}</h2>
+                <div className={styles.metaRow}>
+                  <p>{item.message}</p>
+                  <span>{item.created_at || item.due_date}</span>
+                </div>
+              </div>
+              {item.type === "urgent" && <div className={styles.unreadDot} />}
+            </article>
+          ))
+        ) : (
+          <div className={styles.emptyText}>📭 ไม่มีแจ้งเตือนใหม่</div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+// 🚩 ต้องครอบด้วย Suspense เพราะมีการใช้ useSearchParams
+export default function NotificationsPage() {
+  return (
+    <Suspense fallback={<div>กำลังโหลด...</div>}>
+      <NotificationsContent />
+    </Suspense>
+  );
+}

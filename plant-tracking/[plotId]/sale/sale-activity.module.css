@@ -1,0 +1,270 @@
+.page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ebebeb;
+}
+
+.header {
+  background: #2fa45a;
+  color: #fff;
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.backBtn {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #dff3e7;
+  font-size: 42px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.header h1 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px 20px;
+}
+
+.formSection h2 {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.formRow label {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.formRow input,
+.formRow select {
+  border: 2px solid #c8cfeb;
+  border-radius: 14px;
+  background: #ececec;
+  padding: 10px 12px;
+}
+
+.amountRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amountRow input {
+  width: 100%;
+}
+
+.amountRow span {
+  font-size: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.imagesRow {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.imageUpload {
+  border: 0;
+  border-radius: 24px;
+  background: #d8d8d8;
+  min-height: 170px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.uploadedImage {
+  object-fit: cover;
+}
+
+.imageMenu {
+  width: 198px;
+  background: rgba(245, 246, 249, 0.98);
+  border: 1px solid #e3e5ee;
+  border-radius: 14px;
+  padding: 8px;
+  margin-top: 10px;
+  box-shadow: 0 16px 34px rgba(26, 28, 34, 0.2);
+}
+
+.imageMenu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.imageMenu button:hover {
+  background: #e8ebf4;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.actionRow {
+  margin-top: 14px;
+  display: flex;
+  gap: 18px;
+}
+
+.actionRow button {
+  flex: 1;
+  border: 0;
+  border-radius: 22px;
+  height: 62px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.saveBtn {
+  background: #2fa45a;
+  color: #fff;
+}
+
+.editBtn {
+  background: #e3e3e8;
+  color: #111;
+}
+
+.bottomNav {
+  background: #ffffff;
+  border-top: 1px solid #e1dbcc;
+  border-top-left-radius: 30px;
+  border-top-right-radius: 30px;
+  padding: 10px 6px 14px;
+  display: flex;
+  justify-content: space-around;
+}
+
+.navItem {
+  border: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.active {
+  font-weight: 700;
+}
+
+.green {
+  color: #2f9b59;
+}
+
+.orange {
+  color: #f39b1a;
+}
+
+@media (max-width: 480px) {
+  .header {
+    min-height: 84px;
+  }
+
+  .backBtn {
+    width: 40px;
+    height: 40px;
+    font-size: 32px;
+  }
+
+  .header h1 {
+    font-size: 18px;
+  }
+
+  .formSection h2 {
+    font-size: 18px;
+  }
+
+  .formRow {
+    grid-template-columns: 1fr 1.5fr;
+  }
+
+  .formRow label {
+    font-size: 16px;
+  }
+
+  .formRow input,
+  .formRow select {
+    border-radius: 12px;
+    padding: 8px 10px;
+  }
+
+  .amountRow span {
+    font-size: 16px;
+  }
+
+  .imageUpload {
+    min-height: 120px;
+    border-radius: 18px;
+  }
+
+  .actionRow button {
+    height: 52px;
+    font-size: 18px;
+  }
+
+  .imageMenu {
+    width: 154px;
+    border-radius: 12px;
+    padding: 6px;
+  }
+
+  .imageMenu button {
+    font-size: 13px;
+    gap: 8px;
+    padding: 6px 8px;
+  }
+
+  .icon {
+    font-size: 22px;
+  }
+
+  .navItem {
+    font-size: 12px;
+  }
+}
