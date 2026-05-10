@@ -74,7 +74,7 @@
     <table>
       <thead>
         <tr>
-          <th>ชื่อผู้ใช้งาน</th>
+          <th>ชื่อเกษตรกร</th>
           <th>หัวข้อปัญหา</th>
           <th>รายละเอียด</th>
           <th>วันที่แจ้ง</th>
@@ -96,7 +96,7 @@
             <td>{{ $ticket->reporter_name }}</td>
             <td>{{ $ticket->subject ?: '-' }}</td>
             <td>{{ $ticket->message ?: '-' }}</td>
-            <td>{{ $ticket->formatted_date }}</td>
+            <td>{{ $ticket->formatted_date_short }}</td>
             <td class="{{ $statusClass }}">{{ $ticket->status }}</td>
           </tr>
         @empty

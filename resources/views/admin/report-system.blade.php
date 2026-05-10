@@ -12,7 +12,7 @@
 <form class="card" style="margin-top: 16px;" method="GET" action="{{ url('/admin/report/system') }}">
   <div class="prep-filters">
     <div class="search-field">
-      <input class="search-input" type="text" name="q" value="{{ $filters['q'] }}" placeholder="ค้นหาจากชื่อผู้ใช้ หัวข้อ อีเมล เบอร์โทร หรือรายละเอียด">
+      <input class="search-input" type="text" name="q" value="{{ $filters['q'] }}" placeholder="ค้นหาจากชื่อเกษตรกร หัวข้อ อีเมล เบอร์โทร หรือรายละเอียด">
       <button class="search-btn" type="submit" aria-label="ค้นหา">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="7"></circle>
@@ -45,7 +45,7 @@
   <table class="table">
     <thead>
       <tr>
-        <th>ชื่อผู้ใช้งาน</th>
+        <th>ชื่อเกษตรกร</th>
         <th>ปัญหา</th>
         <th>วันที่</th>
         <th>สถานะ</th>
@@ -66,7 +66,7 @@
             <strong>{{ $ticket->subject ?: 'ไม่ระบุหัวข้อ' }}</strong>
             <div class="muted">{{ \Illuminate\Support\Str::limit($ticket->message ?: '-', 90) }}</div>
           </td>
-          <td>{{ $ticket->formatted_date }}</td>
+          <td>{{ $ticket->formatted_date_short }}</td>
           <td><span class="status-pill {{ $ticket->status_class }}">{{ $ticket->status }}</span></td>
           <td><a class="btn ghost" href="{{ $ticket->detail_url }}">ดูรายละเอียด</a></td>
           <td>

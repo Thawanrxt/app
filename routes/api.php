@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\MillTrackingActivityController;
 use App\Http\Controllers\Api\PestTrackingActivityController;
 use App\Http\Controllers\Api\PrepTrackingActivityController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\TrackingAdviceController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WaterTrackingActivityController;
 use Illuminate\Support\Facades\Route;
@@ -44,4 +45,9 @@ Route::prefix('v1')->group(function (): void {
 
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);
+
+    Route::middleware('api.token')->group(function (): void {
+        Route::get('/advice', [TrackingAdviceController::class, 'index']);
+        Route::get('/advice/{activityId}', [TrackingAdviceController::class, 'show']);
+    });
 });

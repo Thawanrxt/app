@@ -8,6 +8,7 @@ use App\Http\Controllers\AdminHarvestTrackingController;
 use App\Http\Controllers\AdminMillTrackingController;
 use App\Http\Controllers\AdminPestTrackingController;
 use App\Http\Controllers\AdminPrepTrackingController;
+use App\Http\Controllers\AdminPasswordResetController;
 use App\Http\Controllers\AdminWaterTrackingController;
 use App\Http\Controllers\RiceIssueReportController;
 use App\Http\Controllers\RiceVarietyController;
@@ -26,6 +27,10 @@ Route::get('/', function () {
 Route::middleware('admin.guest')->group(function (): void {
     Route::get('/admin/login', [AdminAuthController::class, 'create']);
     Route::post('/admin/login', [AdminAuthController::class, 'store']);
+    Route::get('/admin/forgot-password', [AdminPasswordResetController::class, 'requestForm'])->name('admin.password.request');
+    Route::post('/admin/forgot-password', [AdminPasswordResetController::class, 'sendResetLink'])->name('admin.password.email');
+    Route::get('/admin/reset-password/{token}', [AdminPasswordResetController::class, 'resetForm'])->name('admin.password.reset');
+    Route::post('/admin/reset-password', [AdminPasswordResetController::class, 'reset'])->name('admin.password.update');
 });
 
 Route::middleware('admin.auth')->group(function (): void {
@@ -33,10 +38,16 @@ Route::middleware('admin.auth')->group(function (): void {
 
     Route::middleware('admin.menu:dashboard')->group(function (): void {
         Route::get('/admin', [AdminDashboardController::class, 'index'])->middleware('admin.action:dashboard,view');
+        Route::get('/admin/followup-plans/create', [AdminDashboardController::class, 'createFollowupPlan'])->middleware('admin.action:dashboard,manage');
+        Route::post('/admin/followup-plans', [AdminDashboardController::class, 'storeFollowupPlan'])->middleware('admin.action:dashboard,manage');
         Route::post('/admin/dashboard-work-items/{dashboardWorkItem}/toggle-followup', [AdminDashboardController::class, 'toggleFollowup'])->middleware('admin.action:dashboard,manage');
         Route::get('/admin/alerts', [AdminDashboardController::class, 'alerts'])->middleware('admin.action:dashboard,view');
         Route::post('/admin/alerts/mark-read', [AdminDashboardController::class, 'markAlertsRead'])->middleware('admin.action:dashboard,manage');
         Route::get('/admin/activity', [AdminDashboardController::class, 'activity'])->middleware('admin.action:dashboard,view');
+        Route::get('/admin/dashboard/today-tasks', [AdminDashboardController::class, 'todayTasks'])->middleware('admin.action:dashboard,view');
+        Route::get('/admin/dashboard/issue-reports', [AdminDashboardController::class, 'issueReports'])->middleware('admin.action:dashboard,view');
+        Route::get('/admin/dashboard/document-reviews', [AdminDashboardController::class, 'documentReviews'])->middleware('admin.action:dashboard,view');
+        Route::get('/admin/dashboard/all-issues', [AdminDashboardController::class, 'allIssues'])->middleware('admin.action:dashboard,view');
         Route::get('/admin/report/export/print', [AdminDashboardController::class, 'printSummary'])->middleware('admin.action:dashboard,view');
     });
 
@@ -99,6 +110,7 @@ Route::middleware('admin.auth')->group(function (): void {
     Route::middleware('admin.menu:srp_farmers')->group(function (): void {
         Route::get('/admin/srp/farmers', [SrpAssessmentController::class, 'index'])->middleware('admin.action:srp_farmers,view');
         Route::get('/admin/srp/farmers/passed', [SrpAssessmentController::class, 'passed'])->middleware('admin.action:srp_farmers,view');
+        Route::get('/admin/srp/farmers/{farmer}/plots/{plot}', [SrpAssessmentController::class, 'plotOverview'])->middleware('admin.action:srp_farmers,view');
         Route::get('/admin/srp/farmers/{farmer}', [SrpAssessmentController::class, 'show'])->middleware('admin.action:srp_farmers,view');
     });
 

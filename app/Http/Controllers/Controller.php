@@ -15,9 +15,29 @@ abstract class Controller
                 return null;
             }
 
-            return TrackingAdvice::query()
-                ->where('page_key', $pageKey)
-                ->first();
+            $query = TrackingAdvice::query();
+
+            if (Schema::hasColumn('tracking_advices', 'page_key')) {
+                return $query
+                    ->where('page_key', $pageKey)
+                    ->first();
+            }
+
+            if (Schema::hasColumn('tracking_advices', 'detail_url')) {
+                return $query
+                    ->where('detail_url', 'like', '%' . $pageKey)
+                    ->first();
+            }
+
+            if (Schema::hasColumn('tracking_advices', 'activity_id')) {
+                $activityId = str_contains($pageKey, '-') ? substr($pageKey, strrpos($pageKey, '-') + 1) : $pageKey;
+
+                return $query
+                    ->where('activity_id', $activityId)
+                    ->first();
+            }
+
+            return null;
         } catch (Throwable) {
             return null;
         }

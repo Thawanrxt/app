@@ -60,7 +60,9 @@
       <label>ตำแหน่งแอดมิน
         <input class="input" name="admin_title" type="text" placeholder="เช่น ผู้ประสานงานภาคสนาม" value="{{ old('admin_title', $userRecord->admin_title) }}">
       </label>
-      <div></div>
+      <label>Email
+        <input class="input" name="email" type="email" placeholder="กรอกอีเมลสำหรับรับลิงก์รีเซ็ตรหัสผ่าน" value="{{ old('email', $userRecord->email ?? '') }}">
+      </label>
       <label>จังหวัดที่รับผิดชอบ
         <select class="input" id="scope_province" name="scope_province" data-selected="{{ old('scope_province', $userRecord->scope_province) }}">
           <option value="">{{ old('scope_province', $userRecord->scope_province) ? 'กำลังโหลดข้อมูล...' : 'เลือกจังหวัด' }}</option>

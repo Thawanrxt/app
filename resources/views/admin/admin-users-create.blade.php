@@ -59,6 +59,9 @@
       <label>ตำแหน่งแอดมิน
         <input class="input" name="admin_title" type="text" placeholder="เช่น ผู้ประสานงานภาคสนาม" value="{{ old('admin_title') }}">
       </label>
+      <label>Email
+        <input class="input" name="email" type="email" placeholder="กรอกอีเมลสำหรับรับลิงก์รีเซ็ตรหัสผ่าน" value="{{ old('email') }}">
+      </label>
       <div></div>
       <label>จังหวัดที่รับผิดชอบ
         <select class="input" id="scope_province" name="scope_province" data-selected="{{ old('scope_province') }}">

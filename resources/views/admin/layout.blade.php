@@ -895,7 +895,7 @@
             alertEl.parentNode.removeChild(alertEl);
           }
         }, 400);
-      }, 2400);
+      }, 5000);
     });
   })();
 </script>

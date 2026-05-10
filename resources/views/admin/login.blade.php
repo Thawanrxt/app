@@ -34,7 +34,7 @@
           @csrf
 
 
-          <div class="admin-auth__app-name">SmartApp</div>
+          <div class="admin-auth__app-name">SRP Admin</div>
 
           <label class="admin-auth__field">
             <span class="admin-auth__field-icon" aria-hidden="true">👤</span>
@@ -45,6 +45,10 @@
             <span class="admin-auth__field-icon" aria-hidden="true">🔒</span>
             <input class="input" type="password" name="password" placeholder="Password" autocomplete="current-password" required>
           </label>
+
+          <div style="display:flex; justify-content:flex-end; margin-top:-4px; margin-bottom:8px;">
+            <a href="{{ route('admin.password.request') }}" style="color:#2563eb; text-decoration:none; font-size:14px;">ลืมรหัสผ่าน</a>
+          </div>
 
           <button class="btn primary admin-auth__submit admin-auth__submit--hero" type="submit">Login</button>
 

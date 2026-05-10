@@ -89,6 +89,7 @@ class SystemIssueReportController extends Controller
 
         return SearchTextMatcher::filterByPriority($tickets, [
             fn (object $ticket) => $ticket->reporter_name ?? null,
+            fn (object $ticket) => $ticket->farmer_name ?? null,
             fn (object $ticket) => $ticket->subject ?? null,
             fn (object $ticket) => $ticket->contact_email ?? null,
             fn (object $ticket) => $ticket->contact_phone ?? null,
@@ -101,6 +102,7 @@ class SystemIssueReportController extends Controller
     {
         return DB::table('support_tickets as tickets')
             ->leftJoin('users', 'users.id', '=', 'tickets.user_id')
+            ->leftJoin('farmer_profiles as profiles', 'profiles.user_id', '=', 'users.id')
             ->select([
                 'tickets.id',
                 'tickets.user_id',
@@ -111,6 +113,7 @@ class SystemIssueReportController extends Controller
                 'tickets.status as source_status',
                 'tickets.created_at',
                 'users.username',
+                'profiles.full_name as farmer_name',
             ]);
     }
 
@@ -137,7 +140,11 @@ class SystemIssueReportController extends Controller
         ];
 
         $status = $statusMap[$statusCode] ?? ['label' => $statusCode !== '' ? $statusCode : 'ไม่ระบุ', 'class' => 'default'];
-        $reporterName = trim((string) ($ticket->username ?? ''));
+        $reporterName = trim((string) ($ticket->farmer_name ?? ''));
+
+        if ($reporterName === '') {
+            $reporterName = trim((string) ($ticket->username ?? ''));
+        }
 
         if ($reporterName === '') {
             $reporterName = trim((string) ($ticket->contact_email ?? ''));
@@ -155,6 +162,7 @@ class SystemIssueReportController extends Controller
         $ticket->status = $status['label'];
         $ticket->status_class = $status['class'];
         $ticket->formatted_date = $this->formatThaiDateTime($ticket->created_at);
+        $ticket->formatted_date_short = $this->formatThaiDate($ticket->created_at);
         $ticket->detail_url = url('/admin/report/system/detail?id=' . $ticket->id);
 
         return $ticket;
@@ -203,6 +211,41 @@ class SystemIssueReportController extends Controller
             $months[(int) date('n', $timestamp)] ?? date('m', $timestamp),
             (int) date('Y', $timestamp) + 543,
             date('H:i', $timestamp)
+        );
+    }
+
+    private function formatThaiDate(?string $value): string
+    {
+        if ($value === null || $value === '') {
+            return '-';
+        }
+
+        $timestamp = strtotime($value);
+
+        if ($timestamp === false) {
+            return (string) $value;
+        }
+
+        $months = [
+            1 => 'ม.ค.',
+            2 => 'ก.พ.',
+            3 => 'มี.ค.',
+            4 => 'เม.ย.',
+            5 => 'พ.ค.',
+            6 => 'มิ.ย.',
+            7 => 'ก.ค.',
+            8 => 'ส.ค.',
+            9 => 'ก.ย.',
+            10 => 'ต.ค.',
+            11 => 'พ.ย.',
+            12 => 'ธ.ค.',
+        ];
+
+        return sprintf(
+            '%d %s %d',
+            (int) date('j', $timestamp),
+            $months[(int) date('n', $timestamp)] ?? date('m', $timestamp),
+            (int) date('Y', $timestamp) + 543
         );
     }
 }

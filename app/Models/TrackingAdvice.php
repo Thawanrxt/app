@@ -24,4 +24,26 @@ class TrackingAdvice extends Model
             'sent_at' => 'datetime',
         ];
     }
+
+    public function getResolvedMessageAttribute(): ?string
+    {
+        return $this->message
+            ?? $this->getAttribute('advice_message')
+            ?? null;
+    }
+
+    public function getResolvedSentAtAttribute(): mixed
+    {
+        $sentAt = $this->getAttribute('sent_at');
+        if ($sentAt) {
+            return $sentAt;
+        }
+
+        $adviceStatus = $this->getAttribute('advice_status');
+        if ($adviceStatus === 'sent') {
+            return $this->getAttribute('updated_at') ?? $this->getAttribute('created_at');
+        }
+
+        return null;
+    }
 }

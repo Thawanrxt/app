@@ -111,7 +111,7 @@
     </div>
     <div style="grid-column: 1 / -1;">
       <span class="muted">หมายเหตุการมอบหมาย</span>
-      <strong style="display:block; margin-top:6px;">{{ $farmer['assignment_note'] ?: '-' }}</strong>
+      <strong style="display:block; margin-top:6px; white-space: pre-line;">{{ $farmer['assignment_note'] ?: '-' }}</strong>
     </div>
   </div>
 </div>
@@ -120,7 +120,7 @@
   <div class="section-head">
     <div>
       <h3>ข้อมูลแปลงและกิจกรรมจากแอพ</h3>
-      <p class="muted">สรุปรายการแปลงหลัก/แปลงทั้งหมด พร้อมชนิดพืช ความคืบหน้า และกิจกรรมล่าสุดที่บันทึกจากแอพ</p>
+      <p class="muted">สรุปรายการแปลงทั้งหมด พร้อมชนิดพืช ความคืบหน้า และปุ่มกดดูภาพรวมความคืบหน้าของแต่ละแปลง</p>
     </div>
     <span class="tag">{{ $farmer['plot_count'] }} แปลง</span>
   </div>
@@ -140,6 +140,7 @@
             <th>กิจกรรมล่าสุด</th>
             <th>อัปเดตล่าสุด</th>
             <th>ความคืบหน้า</th>
+            <th>ภาพรวม</th>
           </tr>
         </thead>
         <tbody>
@@ -159,6 +160,9 @@
                   </div>
                   <strong>{{ $plot['progress_percent'] }}%</strong>
                 </div>
+              </td>
+              <td>
+                <a class="btn ghost btn-sm" href="/admin/srp/farmers/{{ $farmer['slug'] }}/plots/{{ $plot['plot_id'] }}">ดูภาพรวมแปลง</a>
               </td>
             </tr>
           @endforeach

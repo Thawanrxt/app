@@ -23,7 +23,7 @@ class LegacyTrackingApiService
 
     public function createActivity(string $typeCode, array $payload): object
     {
-        $activityId = DB::transaction(function () use ($typeCode, $payload): string {
+        $context = DB::transaction(function () use ($typeCode, $payload): array {
             $typeId = $this->resolveTypeId($typeCode);
             $plan = $this->resolvePlan($payload['plot_code']);
             $activityId = (string) Str::uuid();
@@ -48,8 +48,16 @@ class LegacyTrackingApiService
                 );
             }
 
-            return $activityId;
+            return [
+                'activity_id' => $activityId,
+                'plan' => $plan,
+            ];
         });
+
+        $activityId = (string) ($context['activity_id'] ?? '');
+        $plan = $context['plan'] ?? null;
+
+        $this->syncDashboardWorkItem($typeCode, $payload, $activityId, $plan);
 
         return $this->legacyTrackingService->findActivity($typeCode, $activityId)
             ?? (object) ['id' => $activityId];
@@ -78,7 +86,7 @@ class LegacyTrackingApiService
             ->orderByRaw("CASE WHEN COALESCE(plans.status, '') = 'ACTIVE' THEN 0 ELSE 1 END")
             ->orderByDesc('plans.start_date')
             ->orderByDesc('plans.expected_harvest_date')
-            ->select(['plans.id', 'plots.id as plot_id', 'plots.farm_id'])
+            ->select(['plans.id', 'plots.id as plot_id', 'plots.farm_id', 'plots.user_id'])
             ->first();
 
         if (!$plan) {
@@ -115,9 +123,7 @@ class LegacyTrackingApiService
     {
         return match ($typeCode) {
             'SOIL' => [
-                ...($this->soilPrepMethodColumnAvailable() ? [
-                    'method' => $payload['method'] ?? null,
-                ] : []),
+                ...($this->soilPrepMethodPayload($payload)),
                 'straw_burning' => $this->boolOrNull($payload['straw_burning'] ?? null),
                 'land_leveling' => $this->boolOrNull($payload['land_leveling'] ?? null),
                 'soil_ph' => $this->decimalOrNull($payload['soil_ph'] ?? null),
@@ -171,12 +177,33 @@ class LegacyTrackingApiService
         };
     }
 
-    private function soilPrepMethodColumnAvailable(): bool
+    private function soilPrepMethodPayload(array $payload): array
+    {
+        $column = $this->soilPrepMethodColumnName();
+
+        if ($column === null) {
+            return [];
+        }
+
+        return [
+            $column => $payload['method'] ?? null,
+        ];
+    }
+
+    private function soilPrepMethodColumnName(): ?string
     {
         try {
-            return Schema::hasColumn('soil_prep_details', 'method');
+            if (Schema::hasColumn('soil_prep_details', 'method')) {
+                return 'method';
+            }
+
+            if (Schema::hasColumn('soil_prep_details', 'soil_preparation_method')) {
+                return 'soil_preparation_method';
+            }
+
+            return null;
         } catch (Throwable) {
-            return false;
+            return null;
         }
     }
 
@@ -214,5 +241,147 @@ class LegacyTrackingApiService
         }
 
         return preg_match('/^\d{2}:\d{2}(:\d{2})?$/', (string) $value) ? (string) $value : null;
+    }
+
+    private function syncDashboardWorkItem(string $typeCode, array $payload, string $activityId, ?object $plan): void
+    {
+        try {
+            if ($activityId === '' || ! Schema::hasTable('dashboard_work_items')) {
+                return;
+            }
+
+            $taskTitle = $this->dashboardTaskTitle($typeCode);
+            $note = trim((string) ($payload['issue_found'] ?? $payload['details'] ?? ''));
+            $plotCode = trim((string) ($payload['plot_code'] ?? ($plan->farm_id ?? '')));
+            $farmerName = trim((string) ($payload['farmer_name'] ?? $payload['performed_by_name'] ?? ''));
+            $roundNumber = trim((string) ($payload['round_number'] ?? ''));
+            $activityDate = $payload['activity_date'] ?? now();
+
+            $payloadForDashboard = [
+                'task_title' => $taskTitle,
+                'issue_category' => $this->dashboardIssueCategory($typeCode),
+                'status' => 'pending_review',
+                'priority' => 'medium',
+                'response_required' => true,
+                'latest_note' => $note !== '' ? $note : 'มีการอัปเดตกิจกรรมใหม่จากแอพเกษตรกร',
+                'meta' => [
+                    'source' => 'mobile_tracking',
+                    'type_code' => $typeCode,
+                    'activity_id' => $activityId,
+                    'round' => $roundNumber !== '' ? $roundNumber : null,
+                    'plot_code' => $plotCode !== '' ? $plotCode : null,
+                    'farmer_name' => $farmerName !== '' ? $farmerName : null,
+                ],
+            ];
+
+            if (Schema::hasColumn('dashboard_work_items', 'farmer_name')) {
+                $payloadForDashboard['farmer_name'] = $farmerName !== '' ? $farmerName : null;
+            }
+
+            if (Schema::hasColumn('dashboard_work_items', 'plot_code')) {
+                $payloadForDashboard['plot_code'] = $plotCode !== '' ? $plotCode : null;
+            }
+
+            if (Schema::hasColumn('dashboard_work_items', 'activity_event_id')) {
+                $payloadForDashboard['activity_event_id'] = $activityId;
+            }
+
+            if (Schema::hasColumn('dashboard_work_items', 'user_id') && filled($plan->user_id ?? null)) {
+                $payloadForDashboard['user_id'] = $plan->user_id;
+            }
+
+            if (Schema::hasColumn('dashboard_work_items', 'plot_id') && filled($plan->plot_id ?? null)) {
+                $payloadForDashboard['plot_id'] = $plan->plot_id;
+            }
+
+            if (Schema::hasColumn('dashboard_work_items', 'last_activity_at')) {
+                $payloadForDashboard['last_activity_at'] = $activityDate;
+            }
+
+            if (Schema::hasColumn('dashboard_work_items', 'due_date')) {
+                $payloadForDashboard['due_date'] = $activityDate;
+            }
+
+            if (Schema::hasColumn('dashboard_work_items', 'resolved_at')) {
+                $payloadForDashboard['resolved_at'] = null;
+            }
+
+            $match = Schema::hasColumn('dashboard_work_items', 'activity_event_id')
+                ? ['activity_event_id' => $activityId]
+                : ['task_title' => $taskTitle, 'plot_code' => $plotCode];
+
+            $query = DB::table('dashboard_work_items');
+            foreach ($match as $column => $value) {
+                $query->where($column, $value);
+            }
+
+            if ($query->exists()) {
+                $query->update(array_merge($payloadForDashboard, [
+                    'updated_at' => now(),
+                ]));
+
+                return;
+            }
+
+            $insertPayload = array_merge($match, $payloadForDashboard, [
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            if ($this->tablePrimaryKeyUsesUuid('dashboard_work_items')) {
+                $insertPayload['id'] = (string) Str::uuid();
+            }
+
+            DB::table('dashboard_work_items')->insert($insertPayload);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+    }
+
+    private function dashboardTaskTitle(string $typeCode): string
+    {
+        return match ($typeCode) {
+            'SOIL' => 'ติดตามการเตรียมดินรอบล่าสุด',
+            'WATER' => 'ติดตามการจัดการน้ำรอบล่าสุด',
+            'FERT' => 'ติดตามการหว่านปุ๋ยรอบล่าสุด',
+            'PEST' => 'ติดตามการจัดการศัตรูพืชรอบล่าสุด',
+            'DISEASE' => 'ติดตามการจัดการโรคพืชรอบล่าสุด',
+            'HARVEST' => 'ติดตามการเก็บเกี่ยวรอบล่าสุด',
+            'SALE' => 'ติดตามการขายข้าวเข้าโรงสีรอบล่าสุด',
+            default => 'ติดตามกิจกรรมรอบล่าสุด',
+        };
+    }
+
+    private function dashboardIssueCategory(string $typeCode): string
+    {
+        return match ($typeCode) {
+            'SOIL' => 'การเตรียมดิน',
+            'WATER' => 'การจัดการน้ำ',
+            'FERT' => 'หว่านปุ๋ย',
+            'PEST' => 'การจัดการศัตรูพืช',
+            'DISEASE' => 'การจัดการโรคพืช',
+            'HARVEST' => 'การเก็บเกี่ยว',
+            'SALE' => 'ขายข้าวเข้าโรงสี',
+            default => 'กิจกรรมจากแอพ',
+        };
+    }
+
+    private function tablePrimaryKeyUsesUuid(string $table): bool
+    {
+        try {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'id')) {
+                return false;
+            }
+
+            $column = DB::table('information_schema.columns')
+                ->where('table_schema', 'public')
+                ->where('table_name', $table)
+                ->where('column_name', 'id')
+                ->value('data_type');
+
+            return $column === 'uuid';
+        } catch (Throwable) {
+            return false;
+        }
     }
 }

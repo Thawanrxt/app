@@ -16,6 +16,8 @@ use Throwable;
 
 class DashboardMetricsService
 {
+    public function __construct(private DashboardOperationsService $operations) {}
+
     public function buildPayload(string $filter = 'all'): array
     {
         $filter = in_array($filter, ['all', 'in_progress', 'needs_fix'], true) ? $filter : 'all';
@@ -35,7 +37,7 @@ class DashboardMetricsService
             ->where('status', 'passed')
             ->count();
 
-        if ($passedFarmers === 0 && $srpAssessments->isEmpty()) {
+        if ($passedFarmers === 0) {
             $passedFarmers = $allItems
                 ->where('status', 'passed')
                 ->pluck('farmer_name')
@@ -47,11 +49,34 @@ class DashboardMetricsService
         $srpPassRate = $farmersTotal > 0 ? (int) round(($passedFarmers / $farmersTotal) * 100) : 0;
 
         $responseRequiredItems = $filteredItems->where('response_required', true);
-        $responseRatePercent = $responseRequiredItems->count() > 0
-            ? (int) round(($responseRequiredItems->filter(fn (DashboardWorkItem $item): bool => $this->responseTimestamp($item) !== null)->count() / $responseRequiredItems->count()) * 100)
+        $responseRespondedTotal = $responseRequiredItems->filter(fn (DashboardWorkItem $item): bool => $this->responseTimestamp($item) !== null)->count();
+        $responseRequiredTotal = $responseRequiredItems->count();
+        $responseRatePercent = $responseRequiredTotal > 0
+            ? (int) round(($responseRespondedTotal / $responseRequiredTotal) * 100)
             : 0;
 
         $updatedAt = $allItems->max('updated_at');
+        $allIssuesTotal = $this->operations->allIssueCount();
+        $todayDueItems = $allItems
+            ->filter(fn (DashboardWorkItem $item): bool => $this->isDueToday($item, $today) && $item->status !== 'passed');
+        $fallbackOpenItems = $allItems
+            ->filter(fn (DashboardWorkItem $item): bool => $item->status !== 'passed')
+            ->take(4);
+        $todayTasksTotal = $todayDueItems->count();
+        $dueTodayTotal = $filteredItems
+            ->filter(fn (DashboardWorkItem $item): bool => $this->isDueToday($item, $today) && $item->status !== 'passed')
+            ->count();
+
+        if ($todayTasksTotal === 0 && $fallbackOpenItems->isNotEmpty()) {
+            $todayTasksTotal = $fallbackOpenItems->count();
+        }
+
+        if ($dueTodayTotal === 0) {
+            $dueTodayTotal = $filteredItems
+                ->filter(fn (DashboardWorkItem $item): bool => $item->status !== 'passed')
+                ->take(4)
+                ->count();
+        }
 
         return [
             'active_filter' => $filter,
@@ -65,17 +90,22 @@ class DashboardMetricsService
                 'srp_passed_total' => $passedFarmers,
             ],
             'quick_stats' => [
-                'today_tasks_total' => $allItems->filter(fn (DashboardWorkItem $item): bool => $this->isDueToday($item, $today) && $item->status !== 'passed')->count(),
+                'today_tasks_total' => $todayTasksTotal,
                 'today_overdue_total' => $allItems->filter(fn (DashboardWorkItem $item): bool => $this->isOverdue($item, $today))->count(),
-                'new_issue_reports_total' => $allItems->where('status', 'needs_fix')->count(),
+                'new_issue_reports_total' => $allItems
+                    ->filter(fn (DashboardWorkItem $item): bool => $this->isIssueReportItem($item) && $item->status !== 'passed')
+                    ->count(),
                 'pending_documents_total' => $allItems->where('status', 'pending_review')->count(),
+                'all_issues_total' => $allIssuesTotal,
                 'urgent_alerts_total' => $allItems->where('priority', 'urgent')->where('status', '!=', 'passed')->count(),
             ],
             'status_overview' => [
                 'pending_review_total' => $filteredItems->where('status', 'pending_review')->count(),
                 'issues_found_total' => $filteredItems->where('status', 'needs_fix')->count(),
-                'due_today_total' => $filteredItems->filter(fn (DashboardWorkItem $item): bool => $this->isDueToday($item, $today) && $item->status !== 'passed')->count(),
+                'due_today_total' => $dueTodayTotal,
                 'response_rate_percent' => $responseRatePercent,
+                'response_responded_total' => $responseRespondedTotal,
+                'response_required_total' => $responseRequiredTotal,
             ],
             'urgent_alerts' => $this->buildUrgentAlerts($filteredItems),
             'recent_activities' => $this->buildRecentActivities($filteredItems),
@@ -157,14 +187,17 @@ class DashboardMetricsService
     {
         return $items
             ->where('priority', 'urgent')
-            ->take(3)
+            ->take(4)
             ->map(function (DashboardWorkItem $item): array {
+                $note = trim((string) ($item->latest_note ?? ''));
+
                 return [
                     'title' => $item->task_title,
+                    'detail' => $note !== '' ? $note : null,
                     'meta' => trim(implode(' • ', array_filter([
                         $item->farmer_name,
                         $item->plot_code,
-                        optional($item->last_activity_at)->translatedFormat('d M Y H:i'),
+                        optional($item->last_activity_at)->translatedFormat('d M Y'),
                     ]))),
                     'chip_label' => $this->statusLabel($item->status),
                     'chip_class' => $this->statusChipClass($item->status),
@@ -181,8 +214,10 @@ class DashboardMetricsService
         return $items
             ->take(4)
             ->map(function (DashboardWorkItem $item): array {
+                $activityTimestamp = $item->last_activity_at ?? $item->updated_at ?? $item->created_at;
+
                 return [
-                    'time' => optional($item->last_activity_at)->format('H:i') ?: '-',
+                    'time' => optional($activityTimestamp)->translatedFormat('d M Y') ?: '-',
                     'title' => $item->task_title,
                     'subtitle' => trim(implode(' • ', array_filter([$item->farmer_name, $item->plot_code, $item->latest_note]))),
                     'tag_label' => $this->statusLabel($item->status),
@@ -194,7 +229,7 @@ class DashboardMetricsService
 
     private function buildTodayFollowups(Collection $items, string $today): array
     {
-        return $items
+        $followups = $items
             ->filter(fn (DashboardWorkItem $item): bool => $this->isDueToday($item, $today) && $item->status !== 'passed')
             ->take(5)
             ->map(function (DashboardWorkItem $item): array {
@@ -204,7 +239,45 @@ class DashboardMetricsService
                     'checked' => filled($item->responded_at),
                 ];
             })
-            ->all();
+            ->values();
+
+        if ($followups->isEmpty()) {
+            $followups = $items
+                ->filter(function (DashboardWorkItem $item) use ($today): bool {
+                    if ($item->status === 'passed') {
+                        return false;
+                    }
+                    $planned = $this->plannedDateForItem($item);
+
+                    // Only show items with no planned date OR planned date is today/past (not future)
+                    return $planned === null || $planned->toDateString() <= $today;
+                })
+                ->sortByDesc(fn (DashboardWorkItem $item) => $item->last_activity_at ?? $item->updated_at ?? $item->created_at)
+                ->take(5)
+                ->map(function (DashboardWorkItem $item): array {
+                    $plannedDate = $this->plannedDateForItem($item);
+                    $dateLabel = $plannedDate?->translatedFormat('d M Y')
+                        ?: optional($item->last_activity_at ?? $item->updated_at ?? $item->created_at)->translatedFormat('d M Y');
+
+                    $title = trim(implode(' ', array_filter([
+                        $item->task_title,
+                        $item->plot_code ? '(' . $item->plot_code . ')' : null,
+                    ])));
+
+                    if (filled($dateLabel)) {
+                        $title .= ' • ' . $dateLabel;
+                    }
+
+                    return [
+                        'id' => $item->id,
+                        'title' => $title,
+                        'checked' => filled($item->responded_at),
+                    ];
+                })
+                ->values();
+        }
+
+        return $followups->all();
     }
 
     private function buildLatestAssessments(Collection $items): array
@@ -250,7 +323,21 @@ class DashboardMetricsService
 
     private function buildCommonIssues(Collection $items): array
     {
-        $issueItems = $items->filter(fn (DashboardWorkItem $item): bool => filled($item->issue_category));
+        $issueItems = $items
+            ->map(function (DashboardWorkItem $item): ?array {
+                $label = $this->commonIssueLabel($item);
+
+                if ($label === null) {
+                    return null;
+                }
+
+                return [
+                    'label' => $label,
+                ];
+            })
+            ->filter()
+            ->values();
+
         $total = $issueItems->count();
 
         if ($total === 0) {
@@ -258,13 +345,14 @@ class DashboardMetricsService
         }
 
         return $issueItems
-            ->groupBy('issue_category')
+            ->groupBy('label')
             ->map(function (Collection $group, string $issue) use ($total): array {
                 $count = $group->count();
 
                 return [
                     'label' => $issue,
                     'count' => $count,
+                    'total' => $total,
                     'percent' => (int) round(($count / $total) * 100),
                 ];
             })
@@ -279,16 +367,89 @@ class DashboardMetricsService
             ->all();
     }
 
+    private function countCommonIssues(Collection $items): int
+    {
+        return $items
+            ->filter(fn (DashboardWorkItem $item): bool => $this->commonIssueLabel($item) !== null)
+            ->count();
+    }
+
+    private function commonIssueLabel(DashboardWorkItem $item): ?string
+    {
+        $text = mb_strtolower(trim(implode(' ', array_filter([
+            (string) $item->issue_category,
+            (string) $item->task_title,
+            (string) $item->latest_note,
+        ]))));
+
+        if ($text === '') {
+            return null;
+        }
+
+        return match (true) {
+            str_contains($text, 'รายงานปัญหาการใช้งานระบบ'),
+            str_contains($text, 'support'),
+            str_contains($text, 'system') => 'รายงานปัญหาการใช้งานระบบ',
+
+            str_contains($text, 'รายงานปัญหาการปลูกข้าว'),
+            str_contains($text, 'issue_found'),
+            str_contains($text, 'แจ้งเตือนรายงานปัญหา') => 'รายงานปัญหาการปลูกข้าว',
+
+            str_contains($text, 'water'),
+            str_contains($text, 'จัดการน้ำ'),
+            str_contains($text, 'น้ำ') => 'การจัดการน้ำ',
+
+            str_contains($text, 'disease'),
+            str_contains($text, 'โรคพืช'),
+            str_contains($text, 'โรค') => 'การจัดการโรคพืช',
+
+            str_contains($text, 'pest'),
+            str_contains($text, 'ศัตรูพืช'),
+            str_contains($text, 'แมลง') => 'การจัดการศัตรูพืช',
+
+            str_contains($text, 'fert'),
+            str_contains($text, 'fertilizer'),
+            str_contains($text, 'ปุ๋ย') => 'หว่านปุ๋ย',
+
+            str_contains($text, 'soil'),
+            str_contains($text, 'prep'),
+            str_contains($text, 'เตรียมดิน'),
+            str_contains($text, 'ดิน') => 'การเตรียมดิน',
+
+            str_contains($text, 'harvest'),
+            str_contains($text, 'เก็บเกี่ยว') => 'การเก็บเกี่ยว',
+
+            str_contains($text, 'mill'),
+            str_contains($text, 'ขายข้าว'),
+            str_contains($text, 'โรงสี') => 'ขายข้าวเข้าโรงสี',
+
+            str_contains($text, 'test'),
+            str_contains($text, 'ทดสอบ') => 'ทดสอบระบบ',
+
+            str_contains($text, 'เอกสาร'),
+            str_contains($text, 'document'),
+            str_contains($text, 'srp') => null,
+
+            default => filled($item->issue_category) ? (string) $item->issue_category : null,
+        };
+    }
+
     private function buildCalendarEvents(Collection $items): array
     {
         return $items
-            ->filter(fn (DashboardWorkItem $item): bool => filled($item->due_date))
-            ->map(function (DashboardWorkItem $item): array {
+            ->map(function (DashboardWorkItem $item): ?array {
+                $plannedDate = $this->plannedDateForItem($item);
+
+                if (! $plannedDate) {
+                    return null;
+                }
+
                 return [
-                    'date' => $item->due_date?->toDateString(),
+                    'date' => $plannedDate->toDateString(),
                     'status' => $item->status,
                 ];
             })
+            ->filter()
             ->values()
             ->all();
     }
@@ -444,14 +605,61 @@ class DashboardMetricsService
 
     private function isDueToday(DashboardWorkItem $item, string $today): bool
     {
-        return $item->due_date?->toDateString() === $today;
+        return $this->plannedDateForItem($item)?->toDateString() === $today;
     }
 
     private function isOverdue(DashboardWorkItem $item, string $today): bool
     {
-        return filled($item->due_date)
-            && $item->due_date->toDateString() < $today
+        $plannedDate = $this->plannedDateForItem($item);
+
+        return filled($plannedDate)
+            && $plannedDate->toDateString() < $today
             && $item->status !== 'passed';
+    }
+
+    private function plannedDateForItem(DashboardWorkItem $item): ?Carbon
+    {
+        if ($item->due_date instanceof Carbon) {
+            return $item->due_date;
+        }
+
+        if (filled($item->due_date)) {
+            try {
+                return Carbon::parse($item->due_date);
+            } catch (Throwable) {
+                // Fall through to meta lookup.
+            }
+        }
+
+        $meta = $item->meta;
+
+        if (is_string($meta)) {
+            $decoded = json_decode($meta, true);
+            $meta = is_array($decoded) ? $decoded : [];
+        }
+
+        $plannedDate = is_array($meta) ? ($meta['planned_date'] ?? null) : null;
+
+        if (! filled($plannedDate)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse((string) $plannedDate);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function isIssueReportItem(DashboardWorkItem $item): bool
+    {
+        $meta = $item->meta;
+        if (is_string($meta) && $meta !== '') {
+            $decoded = json_decode($meta, true);
+            $meta = is_array($decoded) ? $decoded : [];
+        }
+
+        return is_array($meta) && isset($meta['report_type']) && (string) $meta['report_type'] !== '';
     }
 
     private function statusLabel(string $status): string
