@@ -68,6 +68,8 @@ Route::middleware('admin.auth')->group(function (): void {
         Route::get('/admin/farmer-users/{user}/edit', [UserManagementController::class, 'edit'])->middleware('admin.action:farmer_users,edit');
         Route::put('/admin/farmer-users/{user}', [UserManagementController::class, 'update'])->middleware('admin.action:farmer_users,edit');
         Route::post('/admin/farmer-users/{user}/delete', [UserManagementController::class, 'destroy'])->middleware('admin.action:farmer_users,delete');
+        Route::get('/admin/farmer-users/{user}/plots/create', [UserManagementController::class, 'createPlot'])->middleware('admin.action:farmer_users,edit');
+        Route::post('/admin/farmer-users/{user}/plots', [UserManagementController::class, 'storePlot'])->middleware('admin.action:farmer_users,edit');
     });
 
     Route::middleware('admin.menu:admin_users')->group(function (): void {

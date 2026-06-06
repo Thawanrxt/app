@@ -148,10 +148,22 @@ class UserManagementController extends Controller
         abort_if($userRecord === null, 404);
         abort_unless($this->canManageUserRecord($userRecord), 403);
 
+        $plotsQuery = DB::table('plots')
+            ->where('user_id', $userRecord->id)
+            ->where('status', 'ACTIVE')
+            ->select(['id', 'farm_id', 'plot_name', 'area_rai', 'area_ngan', 'area_sq_wa', 'crop_type', 'status']);
+
+        if (Schema::hasColumn('plots', 'is_primary')) {
+            $plotsQuery->orderByRaw('COALESCE(is_primary, 0) DESC');
+        }
+
+        $plots = $plotsQuery->orderBy('farm_id')->get();
+
         return view('admin.farmer-users-show', [
             'userRecord' => $userRecord,
             'canManageAdminRoles' => AdminAccess::isSuperAdmin(Auth::user()),
             'assignableAdminOptions' => $this->assignableAdminOptions(),
+            'plots' => $plots,
         ]);
     }
 
@@ -741,6 +753,133 @@ class UserManagementController extends Controller
         });
 
         return redirect('/admin/farmer-users')->with('success', 'ลบผู้ใช้งานเรียบร้อยแล้ว');
+    }
+
+    public function createPlot(string $user): View
+    {
+        $userRecord = $this->findUserRecord($user);
+
+        abort_if($userRecord === null, 404);
+        abort_unless($this->canManageUserRecord($userRecord), 403);
+
+        $riceVarieties = DB::table('rice_varieties')
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->select(['id', 'name', 'grow_duration_days', 'recommended_season'])
+            ->get();
+
+        return view('admin.farmer-plot-create', [
+            'userRecord' => $userRecord,
+            'riceVarieties' => $riceVarieties,
+        ]);
+    }
+
+    public function storePlot(Request $request, string $user): RedirectResponse
+    {
+        $userRecord = $this->findUserRecord($user);
+
+        abort_if($userRecord === null, 404);
+        abort_unless($this->canManageUserRecord($userRecord), 403);
+
+        $validated = $request->validate([
+            'plot_name'     => ['required', 'string', 'max:255'],
+            'area_rai'      => ['nullable', 'integer', 'min:0'],
+            'area_ngan'     => ['nullable', 'integer', 'min:0'],
+            'area_sq_wa'    => ['nullable', 'integer', 'min:0'],
+            'rice_id'       => ['nullable', 'string'],
+            'planting_type' => ['nullable', 'string', 'max:100'],
+            'season_type'   => ['nullable', 'string', 'max:100'],
+            'start_date'    => ['nullable', 'date'],
+            'province'      => ['nullable', 'string', 'max:255'],
+            'district'      => ['nullable', 'string', 'max:255'],
+            'subdistrict'   => ['nullable', 'string', 'max:255'],
+            'postcode'      => ['nullable', 'string', 'max:10'],
+            'latitude'      => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude'     => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
+
+        $provinceId = $this->resolveProvinceId($validated['province'] ?? null);
+        $districtId = $this->resolveDistrictId($validated['district'] ?? null, $provinceId);
+
+        $rai     = (int) ($validated['area_rai'] ?? 0);
+        $ngan    = (int) ($validated['area_ngan'] ?? 0);
+        $sqWa    = (int) ($validated['area_sq_wa'] ?? 0);
+        $sqMeter = ($rai * 1600) + ($ngan * 400) + ($sqWa * 4);
+
+        DB::transaction(function () use ($validated, $userRecord, $provinceId, $districtId, $rai, $ngan, $sqWa, $sqMeter): void {
+            $plotId = (string) Str::uuid();
+
+            $plotData = [
+                'id'          => $plotId,
+                'user_id'     => $userRecord->id,
+                'farm_id'     => $this->generateUniqueFarmId(),
+                'plot_name'   => $validated['plot_name'],
+                'area_rai'    => $rai ?: null,
+                'area_sq_wa'  => $sqWa ?: null,
+                'crop_type'   => null,
+                'address'     => null,
+                'province_id' => $provinceId,
+                'lat'         => $validated['latitude'] ?? null,
+                'lon'         => $validated['longitude'] ?? null,
+                'latitude'    => $validated['latitude'] ?? null,
+                'longitude'   => $validated['longitude'] ?? null,
+                'status'      => 'ACTIVE',
+            ];
+
+            if ($this->hasColumn('plots', 'district_id')) {
+                $plotData['district_id'] = $districtId;
+            }
+            if ($this->hasColumn('plots', 'area_ngan')) {
+                $plotData['area_ngan'] = $ngan ?: null;
+            }
+            if ($this->hasColumn('plots', 'area_sq_meter')) {
+                $plotData['area_sq_meter'] = $sqMeter ?: null;
+            }
+            if ($this->hasColumn('plots', 'subdistrict')) {
+                $plotData['subdistrict'] = $validated['subdistrict'] ?? null;
+            }
+            if ($this->hasColumn('plots', 'postcode')) {
+                $plotData['postcode'] = $validated['postcode'] ?? null;
+            }
+
+            DB::table('plots')->insert($plotData);
+
+            $plantingType = $validated['planting_type'] ?? 'ข้าว';
+
+            if (empty($validated['rice_id']) && filled($plantingType)) {
+                DB::table('plots')->where('id', $plotId)->update(['crop_type' => $plantingType]);
+            }
+
+            if (filled($validated['start_date'] ?? null)) {
+                $startDate   = \Carbon\Carbon::parse($validated['start_date']);
+                $rice        = filled($validated['rice_id'] ?? null)
+                    ? DB::table('rice_varieties')->where('id', $validated['rice_id'])->first()
+                    : null;
+                $harvestDate = ($rice && filled($rice->grow_duration_days))
+                    ? $startDate->copy()->addDays((int) $rice->grow_duration_days)
+                    : null;
+
+                if ($rice) {
+                    DB::table('plots')->where('id', $plotId)->update(['crop_type' => $rice->name]);
+                }
+
+                if (Schema::hasTable('planting_plans')) {
+                    DB::table('planting_plans')->insert([
+                        'id'                    => (string) Str::uuid(),
+                        'plot_id'               => $plotId,
+                        'rice_id'               => $validated['rice_id'] ?? null,
+                        'season_type'           => $validated['season_type'] ?? 'นาปี',
+                        'planting_type'         => $plantingType,
+                        'start_date'            => $startDate->toDateString(),
+                        'expected_harvest_date' => $harvestDate?->toDateString(),
+                        'status'                => 'ACTIVE',
+                    ]);
+                }
+            }
+        });
+
+        return redirect('/admin/farmer-users/' . $userRecord->id)
+            ->with('success', 'เพิ่มแปลง "' . $validated['plot_name'] . '" เรียบร้อยแล้ว');
     }
 
     public function adminIndex(Request $request): View

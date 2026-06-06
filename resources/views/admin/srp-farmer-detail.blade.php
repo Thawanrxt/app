@@ -122,7 +122,12 @@
       <h3>ข้อมูลแปลงและกิจกรรมจากแอพ</h3>
       <p class="muted">สรุปรายการแปลงทั้งหมด พร้อมชนิดพืช ความคืบหน้า และปุ่มกดดูภาพรวมความคืบหน้าของแต่ละแปลง</p>
     </div>
-    <span class="tag">{{ $farmer['plot_count'] }} แปลง</span>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="tag">{{ $farmer['plot_count'] }} แปลง</span>
+      <a href="/admin/farmer-users/{{ $farmer['id'] }}/plots/create" class="btn primary btn-sm">
+        + เพิ่มแปลง
+      </a>
+    </div>
   </div>
 
   @if (empty($farmer['plots']))

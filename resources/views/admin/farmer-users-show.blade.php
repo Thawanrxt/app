@@ -98,6 +98,57 @@
 </div>
 
 <div class="card" style="margin-top: 16px;">
+  <div class="section-head">
+    <div>
+      <h3>แปลงนาทั้งหมด</h3>
+      <p class="muted">แปลงที่เกษตรกรมีอยู่ในระบบ</p>
+    </div>
+    <a href="/admin/farmer-users/{{ $userRecord->id }}/plots/create" class="btn primary btn-sm">
+      + เพิ่มแปลง
+    </a>
+  </div>
+
+  @if (session('success'))
+    <div class="status-banner success" style="margin-top: 12px;">{{ session('success') }}</div>
+  @endif
+
+  @if (isset($plots) && $plots->isNotEmpty())
+    <div class="srp-table-wrap" style="margin-top: 16px;">
+      <table class="table srp-table">
+        <thead>
+          <tr>
+            <th>รหัสแปลง</th>
+            <th>ชื่อแปลง</th>
+            <th>พื้นที่</th>
+            <th>พืชที่ปลูก</th>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach ($plots as $plot)
+            <tr>
+              <td class="muted" style="font-size:13px;">{{ $plot->farm_id }}</td>
+              <td>{{ $plot->plot_name ?: '-' }}</td>
+              <td>
+                @php
+                  $parts = [];
+                  if (filled($plot->area_rai)) $parts[] = $plot->area_rai . ' ไร่';
+                  if (filled($plot->area_ngan)) $parts[] = $plot->area_ngan . ' งาน';
+                  if (filled($plot->area_sq_wa)) $parts[] = $plot->area_sq_wa . ' ตร.ว.';
+                @endphp
+                {{ implode(' ', $parts) ?: '-' }}
+              </td>
+              <td>{{ $plot->crop_type ?: '-' }}</td>
+            </tr>
+          @endforeach
+        </tbody>
+      </table>
+    </div>
+  @else
+    <div class="empty-state" style="margin-top: 16px;">ยังไม่มีแปลงในระบบ</div>
+  @endif
+</div>
+
+<div class="card" style="margin-top: 16px;">
   <h3>ข้อมูลแปลงหลัก</h3>
   <div class="form-grid">
     <label>จังหวัดแปลง

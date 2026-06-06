@@ -112,6 +112,7 @@
             <th>กิจกรรมจากแอพ</th>
             <th>ความคืบหน้า</th>
             <th>รายละเอียด</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -164,6 +165,7 @@
                 </div>
               </td>
               <td><a class="btn ghost btn-sm" href="/admin/srp/farmers/{{ $farmer['slug'] }}">ดูรายละเอียด</a></td>
+              <td><a href="/admin/farmer-users/{{ $farmer['id'] }}/plots/create" class="btn primary btn-sm">+ เพิ่มแปลง</a></td>
             </tr>
           @endforeach
         </tbody>
