@@ -35,10 +35,65 @@ class SystemIssueReportController extends Controller
 
         abort_if($ticket === null, 404);
 
+        // โหลดคำแนะนำที่เคยส่งไปแล้ว (ถ้ามีคอลัมน์)
+        $adminReply = null;
+        $adminReplyAt = null;
+        try {
+            $raw = DB::table('support_tickets')->where('id', $ticketId)->first(['admin_reply', 'admin_reply_at', 'status']);
+            $adminReply = $raw->admin_reply ?? null;
+            $adminReplyAt = $raw->admin_reply_at ?? null;
+        } catch (\Throwable) {}
+
         return view('admin.report-system-detail', [
-            'ticket' => $this->normalizeTicket($ticket),
-            'backUrl' => url('/admin/report/system'),
+            'ticket'      => $this->normalizeTicket($ticket),
+            'adminReply'  => $adminReply,
+            'adminReplyAt' => $adminReplyAt,
+            'backUrl'     => url('/admin/report/system'),
         ]);
+    }
+
+    public function reply(string $ticket, Request $request): RedirectResponse
+    {
+        $exists = DB::table('support_tickets')->where('id', $ticket)->exists();
+        abort_if(! $exists, 404);
+
+        $validated = $request->validate([
+            'admin_reply' => 'required|string|max:2000',
+            'new_status'  => 'required|string|in:IN_PROGRESS,RESOLVED,CLOSED',
+        ]);
+
+        // เพิ่มคอลัมน์ถ้ายังไม่มี
+        try {
+            DB::statement('ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS admin_reply TEXT');
+            DB::statement('ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS admin_reply_at TIMESTAMP');
+        } catch (\Throwable) {}
+
+        // อัปเดต ticket
+        DB::table('support_tickets')->where('id', $ticket)->update([
+            'admin_reply'    => $validated['admin_reply'],
+            'admin_reply_at' => now(),
+            'status'         => $validated['new_status'],
+        ]);
+
+        // ส่ง Notification ไปที่แอพของผู้ใช้
+        $ticketRow = DB::table('support_tickets')->where('id', $ticket)->first(['user_id', 'subject']);
+        if ($ticketRow?->user_id) {
+            try {
+                DB::statement("
+                    INSERT INTO notifications (id, user_id, title, message, is_read, created_at)
+                    VALUES (gen_random_uuid(), ?, ?, ?, false, NOW())
+                ", [
+                    $ticketRow->user_id,
+                    'มีคำตอบกลับจากแอดมิน',
+                    "เรื่อง: " . ($ticketRow->subject ?: 'รายงานปัญหา') . "\n\n" . $validated['admin_reply'],
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Notification insert failed: ' . $e->getMessage());
+            }
+        }
+
+        return redirect('/admin/report/system/detail?id=' . $ticket)
+            ->with('success', 'ส่งคำแนะนำและแจ้งเตือนผู้ใช้เรียบร้อยแล้ว');
     }
 
     public function print(Request $request): View

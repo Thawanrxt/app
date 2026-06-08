@@ -55,6 +55,82 @@ class SrpAssessmentController extends Controller
         ]);
     }
 
+    public function createPlot(string $farmer, SrpFarmerDirectoryService $farmerDirectory): View
+    {
+        $farmerData = $farmerDirectory->farmers()->firstWhere('slug', $farmer);
+
+        abort_unless($farmerData, 404);
+
+        $riceVarieties = DB::table('rice_varieties')
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->select('id', 'name')
+            ->get();
+
+        return view('admin.srp-plot-create', [
+            'farmer'        => $farmerData,
+            'riceVarieties' => $riceVarieties,
+        ]);
+    }
+
+    public function storePlot(string $farmer, Request $request, SrpFarmerDirectoryService $farmerDirectory)
+    {
+        $farmerData = $farmerDirectory->farmers()->firstWhere('slug', $farmer);
+
+        abort_unless($farmerData, 404);
+
+        $validated = $request->validate([
+            'plot_name'             => 'required|string|max:255',
+            'season_type'           => 'required|string|in:นาปี,นาปรัง 1,นาปรัง 2,นาปรัง 3',
+            'crop_type'             => 'required|string|max:100',
+            'rice_id'               => 'required|uuid',
+            'start_date'            => 'required|date',
+            'expected_harvest_date' => 'nullable|date|after_or_equal:start_date',
+            'latitude'              => 'nullable|numeric|between:-90,90',
+            'longitude'             => 'nullable|numeric|between:-180,180',
+            'area_rai'              => 'nullable|integer|min:0',
+            'area_ngan'             => 'nullable|integer|min:0',
+            'area_sq_wa'            => 'nullable|integer|min:0',
+            'area_sq_meter'         => 'nullable|integer|min:0',
+        ]);
+
+        // สร้าง farm_id แบบเดียวกับแอพ เช่น FARM-AB1C2D
+        do {
+            $farmId = 'FARM-' . strtoupper(\Illuminate\Support\Str::random(6));
+        } while (DB::table('plots')->where('farm_id', $farmId)->exists());
+
+        $plotId = (string) \Illuminate\Support\Str::uuid();
+
+        DB::table('plots')->insert([
+            'id'          => $plotId,
+            'user_id'     => $farmerData['id'],
+            'farm_id'     => $farmId,
+            'plot_name'   => $validated['plot_name'],
+            'crop_type'   => $validated['crop_type'],
+            'area_rai'    => (int) ($validated['area_rai'] ?? 0),
+            'area_ngan'   => (int) ($validated['area_ngan'] ?? 0),
+            'area_sq_wa'  => (int) ($validated['area_sq_wa'] ?? 0),
+            'area_sq_meter' => (int) ($validated['area_sq_meter'] ?? 0),
+            'latitude'    => $validated['latitude'] ?? null,
+            'longitude'   => $validated['longitude'] ?? null,
+            'lat'         => $validated['latitude'] ?? null,
+            'lon'         => $validated['longitude'] ?? null,
+            'status'      => 'ACTIVE',
+        ]);
+
+        DB::table('planting_plans')->insert([
+            'id'                    => (string) \Illuminate\Support\Str::uuid(),
+            'plot_id'               => $plotId,
+            'rice_id'               => $validated['rice_id'],
+            'season_type'           => $validated['season_type'],
+            'start_date'            => $validated['start_date'],
+            'expected_harvest_date' => $validated['expected_harvest_date'] ?? null,
+            'status'                => 'ACTIVE',
+        ]);
+
+        return redirect("/admin/srp/farmers/{$farmer}")->with('success', "เพิ่มแปลง \"{$validated['plot_name']}\" เรียบร้อยแล้ว ข้อมูลจะปรากฏในแอพของเกษตรกรทันที");
+    }
+
     public function plotOverview(string $farmer, string $plot, SrpFarmerDirectoryService $farmerDirectory, LegacyTrackingService $legacyTracking): View
     {
         $farmerData = $farmerDirectory->farmers()->firstWhere('slug', $farmer);

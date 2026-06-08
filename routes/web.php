@@ -110,6 +110,8 @@ Route::middleware('admin.auth')->group(function (): void {
     Route::middleware('admin.menu:srp_farmers')->group(function (): void {
         Route::get('/admin/srp/farmers', [SrpAssessmentController::class, 'index'])->middleware('admin.action:srp_farmers,view');
         Route::get('/admin/srp/farmers/passed', [SrpAssessmentController::class, 'passed'])->middleware('admin.action:srp_farmers,view');
+        Route::get('/admin/srp/farmers/{farmer}/plots/create', [SrpAssessmentController::class, 'createPlot'])->middleware('admin.action:srp_farmers,manage');
+        Route::post('/admin/srp/farmers/{farmer}/plots', [SrpAssessmentController::class, 'storePlot'])->middleware('admin.action:srp_farmers,manage');
         Route::get('/admin/srp/farmers/{farmer}/plots/{plot}', [SrpAssessmentController::class, 'plotOverview'])->middleware('admin.action:srp_farmers,view');
         Route::get('/admin/srp/farmers/{farmer}', [SrpAssessmentController::class, 'show'])->middleware('admin.action:srp_farmers,view');
     });
@@ -129,6 +131,7 @@ Route::middleware('admin.auth')->group(function (): void {
         Route::get('/admin/report/system', [SystemIssueReportController::class, 'index'])->middleware('admin.action:report_system,view');
         Route::get('/admin/report/system/print', [SystemIssueReportController::class, 'print'])->middleware('admin.action:report_system,view');
         Route::get('/admin/report/system/detail', [SystemIssueReportController::class, 'show'])->middleware('admin.action:report_system,view');
+        Route::post('/admin/report/system/{ticket}/reply', [SystemIssueReportController::class, 'reply'])->middleware('admin.action:report_system,manage');
         Route::post('/admin/report/system/{ticket}/delete', [SystemIssueReportController::class, 'destroy'])->middleware('admin.action:report_system,delete');
     });
 

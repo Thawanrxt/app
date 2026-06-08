@@ -1,6 +1,11 @@
 @extends('admin.layout')
 @section('title', 'รายละเอียดข้อมูลเกษตรกร')
 @section('content')
+@if (session('success'))
+  <div class="card" style="margin-bottom: 16px; border-color: #86efac; background: #f0fdf4; color: #166534;">
+    {{ session('success') }}
+  </div>
+@endif
 <a class="back-link icon-only" href="/admin/srp/farmers" aria-label="กลับไปรายชื่อเกษตรกร">
   <span class="back-icon">‹</span>
 </a>
@@ -122,7 +127,10 @@
       <h3>ข้อมูลแปลงและกิจกรรมจากแอพ</h3>
       <p class="muted">สรุปรายการแปลงทั้งหมด พร้อมชนิดพืช ความคืบหน้า และปุ่มกดดูภาพรวมความคืบหน้าของแต่ละแปลง</p>
     </div>
-    <span class="tag">{{ $farmer['plot_count'] }} แปลง</span>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="tag">{{ $farmer['plot_count'] }} แปลง</span>
+      <a class="btn primary btn-sm" href="/admin/srp/farmers/{{ $farmer['slug'] }}/plots/create">+ เพิ่มแปลง</a>
+    </div>
   </div>
 
   @if (empty($farmer['plots']))
