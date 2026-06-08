@@ -1,0 +1,347 @@
+.page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ebebeb;
+}
+
+.header {
+  background: #2fa45a;
+  color: #ffffff;
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  position: relative;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.backBtn {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.header h1 {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 12px 18px;
+}
+
+.searchRow {
+  display: grid;
+  grid-template-columns: 1fr 58px;
+  gap: 10px;
+}
+
+.searchBox {
+  border: 2px solid #cad2e7;
+  border-radius: 14px;
+  background: #efefef;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  color: #7a7a7a;
+}
+
+.searchBox input {
+  border: 0;
+  background: transparent;
+  width: 100%;
+  font-size: 20px;
+  color: #333;
+  outline: none;
+}
+
+.searchBox input::placeholder {
+  color: #c5c5c5;
+}
+
+.sortBtn {
+  border: 2px solid #cad2e7;
+  border-radius: 14px;
+  background: #efefef;
+  color: #3b3b3b;
+  font-size: 34px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.summaryRow {
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summaryRow h2,
+.summaryRow p {
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.plotList {
+  margin-top: 12px;
+}
+
+.plotBlock {
+  margin-bottom: 12px;
+}
+
+.plotCard {
+  background: #dcdcdc;
+  border-radius: 18px;
+  padding: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.trackingPanel {
+  margin-top: 10px;
+  border: 2px solid #2b2b2b;
+  border-radius: 2px;
+  background: #efefef;
+  padding: 12px;
+}
+
+.stepRow {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.stepRow:last-child {
+  margin-bottom: 0;
+}
+
+.stepIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.doneIcon {
+  color: #0f1111;
+}
+
+.ongoingIcon,
+.pendingIcon {
+  color: #0f1111;
+}
+
+.stepBody {
+  flex: 1;
+}
+
+.stepTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.stepTop h4 {
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.stepBadge {
+  border-radius: 999px;
+  font-size: 14px;
+  padding: 4px 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.doneBadge {
+  background: #bfe7cf;
+  color: #299d5b;
+}
+
+.ongoingBadge {
+  background: #f4ddbe;
+  color: #f39b1a;
+}
+
+.pendingBadge {
+  background: #dfdfdf;
+  color: #8a8a8a;
+}
+
+.stepTrack {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #cccccc;
+  overflow: hidden;
+}
+
+.stepProgress {
+  height: 100%;
+  background: #2fa45a;
+}
+
+.plotImage {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border-radius: 18px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.image {
+  object-fit: cover;
+}
+
+.plotInfo {
+  flex: 1;
+}
+
+.plotInfo h3 {
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.plotInfo p {
+  font-size: 19px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.expandBtn {
+  border: 0;
+  background: transparent;
+  color: #202020;
+  cursor: pointer;
+  padding-top: 4px;
+}
+
+.bottomNav {
+  background: #ffffff;
+  border-top: 1px solid #e1dbcc;
+  border-top-left-radius: 30px;
+  border-top-right-radius: 30px;
+  padding: 10px 6px 14px;
+  display: flex;
+  justify-content: space-around;
+}
+
+.navItem {
+  border: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.active {
+  font-weight: 700;
+}
+
+.green {
+  color: #2f9b59;
+}
+
+.orange {
+  color: #f39b1a;
+}
+
+@media (max-width: 480px) {
+  .header {
+    min-height: 84px;
+  }
+
+  .header h1 {
+    font-size: 18px;
+  }
+
+  .searchRow {
+    grid-template-columns: 1fr 48px;
+  }
+
+  .searchBox {
+    height: 48px;
+    padding: 0 12px;
+  }
+
+  .searchBox input {
+    font-size: 16px;
+  }
+
+  .sortBtn {
+    font-size: 24px;
+  }
+
+  .summaryRow h2,
+  .summaryRow p {
+    font-size: 18px;
+  }
+
+  .plotImage {
+    width: 92px;
+    height: 92px;
+  }
+
+  .plotInfo h3 {
+    font-size: 22px;
+  }
+
+  .plotInfo p {
+    font-size: 15px;
+  }
+
+  .trackingPanel {
+    padding: 8px;
+  }
+
+  .stepRow {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .stepIcon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .stepTop h4 {
+    font-size: 15px;
+  }
+
+  .stepBadge {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+
+  .icon {
+    font-size: 22px;
+  }
+
+  .navItem {
+    font-size: 12px;
+  }
+}

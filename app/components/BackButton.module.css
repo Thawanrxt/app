@@ -1,0 +1,21 @@
+.btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* สำหรับ header ที่มีพื้นหลังสว่าง */
+.dark {
+  background: rgba(46, 125, 50, 0.12);
+  color: #2e7d32;
+}

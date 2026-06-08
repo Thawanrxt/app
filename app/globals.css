@@ -10,33 +10,426 @@
   }
 }
 
+/* ============================= */
+/*        Global Setup           */
+/* ============================= */
+
 html,
 body {
-  max-width: 100vw;
-  overflow-x: hidden;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: #111;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+#root,
+.app-wrapper {
+  height: 100%;
 }
 
 * {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
+  scrollbar-width: none;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+*::-webkit-scrollbar {
+  display: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+/* ============================= */
+/*        Mobile Mockup          */
+/* ============================= */
+
+.app-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ===== Phone Frame ===== */
+
+.phone-frame {
+  position: relative;
+  width: 390px;
+  height: 844px;
+  border-radius: 40px;
+  overflow: hidden;
+  background: #ffffff;
+
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================= */
+/*        Shared Full Pages      */
+/* ============================= */
+
+.login-page,
+.contact-page,
+.splash-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================= */
+/*        Splash Screen          */
+/* ============================= */
+
+.splash-container {
+  background-image: url("/rice-bg.jpg");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  justify-content: center;
+  align-items: center;
+}
+
+.logo-box {
+  width: 120px;
+  height: 120px;
+  background-color: white;
+  border-radius: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  animation: fade 2s ease-in-out infinite;
+}
+
+@keyframes fade {
+  0% { opacity: 0.4; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0.4; transform: scale(0.95); }
+}
+
+/* ============================= */
+/*        Permission Modal       */
+/* ============================= */
+
+.permission-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  background: rgba(0,0,0,0.4);
+}
+
+.permission-modal {
+  width: 90%;
+  max-width: 280px;
+  max-height: 85%;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 32px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.permission-icon {
+  width: 70px;      /* ปรับตรงนี้ */
+  height: 70px;     /* ให้เท่ากัน */
+  margin-bottom: 16px;
+}
+
+
+.permission-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.permission-buttons button {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  cursor: pointer;
+  border: none;
+}
+
+.allow-btn { background: #2e9b57; color: white; }
+.allow-outline-btn { background: #e8f5ee; color: #2e9b57; }
+.skip-btn { background: #fdeaea; color: #d32f2f; }
+
+/* ============================= */
+/*        Login Page             */
+/* ============================= */
+
+.login-hero {
+  height: 42%;
+  min-height: 260px;
+  background-image: url("/login.jpg");
+  background-size: cover;
+  background-position: center;
+}
+
+.login-card {
+  flex: 1;
+  padding: 28px 24px;
+}
+
+.login-card h1 {
+  margin-bottom: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.login-card input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  font-size: 15px;
+}
+
+.login-card input:focus {
+  outline: none;
+  border-color: #2e9b57;
+  box-shadow: 0 0 0 2px rgba(46, 155, 87, 0.15);
+}
+
+.forgot {
+  font-size: 13px;
+  color: #666;
+  text-align: right;
+  margin: 8px 0 18px;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 12px;
+  background: #2e9b57;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* ============================= */
+/*        Contact Page           */
+/* ============================= */
+
+.contact-page {
+  background: #f3f3f3;
+}
+
+.contact-header {
+  height: 60px;
+  background: #2e9b57;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.contact-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  padding-bottom: 80px;
+}
+
+.contact-card {
+  background: white;
+  border-radius: 18px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+}
+
+.contact-card img {
+  width: 60px;      /* ปรับขนาดตรงนี้ */
+  height: 60px;
+  object-fit: contain;
+}
+
+
+/* ============================= */
+/*        Bottom Nav             */
+/* ============================= */
+
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 65px;
+  background: white;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  border-top: 1px solid #eee;
+}
+
+.back-btn {
+  position: absolute;
+  left: 16px;
+
+  width: 36px;
+  height: 36px;
+
+  border-radius: 50%;
+  border: none;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(6px);
+
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.back-btn:active {
+  transform: scale(0.9);
+}
+/* ===== App Layout ===== */
+.app-wrapper {
+  background: #eaeaea;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+
+.phone-frame {
+  width: 100%;
+  max-width: 420px;
+  height: 100vh;
+  background: #f4f9f4;
+  border-radius: 30px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== Policy Card ===== */
+.policy-card {
+  background: white;
+  padding: 25px;
+  border-radius: 15px;
+  margin: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.policy-title {
+  text-align: center;
+  color: #2e7d32;
+  font-size: 22px;
+  margin-bottom: 20px;
+}
+
+/* ===== Policy Text Scroll ===== */
+.policy-text {
+  height: 300px;
+  overflow-y: auto;
+  padding: 15px;
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #555;
+}
+
+/* ===== Checkbox ===== */
+.policy-check {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+}
+
+/* ===== Buttons ===== */
+.policy-buttons {
+  margin-top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn-primary {
+  padding: 14px;
+  background: #2e7d32;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-disabled {
+  padding: 14px;
+  background: #a5d6a7;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.btn-decline {
+  padding: 14px;
+  background: transparent;
+  color: #d32f2f;
+  border: 1px solid #d32f2f;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* ============================= */
+/*        Real Mobile            */
+/* ============================= */
+
+@media (max-width: 480px) {
+  .app-wrapper {
+    align-items: stretch;
+  }
+
+  .phone-frame {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
   }
 }
+
+
+
