@@ -85,7 +85,6 @@ class User(Base):
     plots = relationship("Plot", back_populates="owner")
     notifications = relationship("Notification", back_populates="user")
     support_tickets = relationship("SupportTicket", back_populates="user")
-
 class FarmerRegistration(Base): 
     __tablename__ = "farmer_registrations"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -131,7 +130,9 @@ class Plot(Base):
     farm_id = Column(String, unique=True, nullable=False)
     plot_name = Column(String)
     area_rai = Column(Integer, default=0)       # 🌟 เพิ่ม: จำนวนไร่
+    area_ngan = Column(Integer, default=0)
     area_sq_wa = Column(Integer, default=0)     # 🌟 เพิ่ม: จำนวนตารางวา
+    area_sq_meter = Column(Integer, default=0)
     crop_type = Column(String)
     address = Column(Text)
     
@@ -239,11 +240,9 @@ class SoilPrepDetail(Base):
     __tablename__ = "soil_prep_details"
     activity_id = Column(UUID(as_uuid=True), ForeignKey("activity_events.id"), primary_key=True)
     straw_burning = Column(String)
-    land_leveling = Column(Boolean)
+    land_leveling = Column(String) # เปลี่ยนจาก Boolean เป็น String เพื่อรองรับชื่อกิจกรรม
     soil_ph = Column(Numeric(4,2))
-    soil_n = Column(Numeric(6,2))
-    soil_p = Column(Numeric(6,2))
-    soil_k = Column(Numeric(6,2))
+    soil_npk = Column(String, nullable=True)
     organic_matter = Column(String)
     activity = relationship("ActivityEvent", back_populates="soil_detail")
 
@@ -251,7 +250,7 @@ class WaterMgmtDetail(Base):
     __tablename__ = "water_control_details"
     activity_id = Column(UUID(as_uuid=True), ForeignKey("activity_events.id"), primary_key=True)
     method = Column(String)
-    water_level_cm = Column(Integer)
+    water_level_cm = Column(String)
     ref_point = Column(String)
     note = Column(Text)
     activity = relationship("ActivityEvent", back_populates="water_detail")
@@ -289,6 +288,8 @@ class HarvestDetail(Base):
     harvest_end_date = Column(Date)
     total_yield_kg = Column(Numeric(14,2))
     moisture_percent = Column(Numeric(5,2))
+    operator_name = Column(String)  # สำหรับชื่อผู้ทำกิจกรรม
+    problems_found = Column(Text)    # สำหรับระบุปัญหาที่พบ
     activity = relationship("ActivityEvent", back_populates="harvest_detail")
 
 class SaleDetail(Base):
@@ -298,6 +299,7 @@ class SaleDetail(Base):
     product_name = Column(String)
     ticket_no = Column(String)
     plate_no = Column(String)
+    sale_date = Column(Date, nullable=True)
     in_time = Column(Time)
     out_time = Column(Time)
     weight_total_kg = Column(Numeric(14,2))
@@ -327,16 +329,6 @@ class Manual(Base):
     name = Column(String, unique=True)    
     icon_url = Column(String)             
     pdf_url = Column(String)              
-
-class Notification(Base):
-    __tablename__ = "notifications"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    title = Column(String)
-    message = Column(String)
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    user = relationship("User", back_populates="notifications")
 
 class WeatherLog(Base):
     __tablename__ = "weather_logs"
@@ -422,3 +414,28 @@ class IssueReport(Base):
 
     # ความสัมพันธ์กับ User
     user = relationship("User")
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    title = Column(String(255))
+    message = Column(Text)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="notifications")
+
+class TrackingAdvice(Base):
+    __tablename__ = "tracking_advices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    page_key = Column(String)
+    page_title = Column(String)
+    farmer_name = Column(String)
+    plot_id = Column(UUID(as_uuid=True))
+    advice_message = Column(Text)
+    sent_at = Column(DateTime, default=datetime.now)
+    sent_by = Column(String, default="แอดมิน")
+    advice_status = Column(String)
+    activity_event_id = Column(String)

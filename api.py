@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -69,8 +70,8 @@ def get_password_hash(password):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -91,7 +92,7 @@ class UserResponse(BaseModel):
     role: str
     model_config = ConfigDict(
         from_attributes=True,
-        arbitrary_types_allowed=True  # ยอมรับประเภทข้อมูลภายนอก
+        arbitrary_types_allowed=True
     )
 # 🌟 เพิ่ม Schema สำหรับรับข้อมูล
 class SoilPrepRequest(BaseModel):
@@ -131,7 +132,7 @@ class FertilizerRequest(BaseModel):
 
 class PestControlRequest(BaseModel):
     plan_id: UUID
-    type_id: int  # 4=ศัตรูพืช, 7=โรคพืช
+    type_id: int  
     performed_by_name: str
     sequence_no: int
     performed_at: date
@@ -145,13 +146,13 @@ class PestControlRequest(BaseModel):
 class HarvestSchema(BaseModel):
     plan_id: UUID
     plot_id: UUID
-    operator_name: Optional[str] = None
-    activity_date: date
-    start_harvest_date: date
-    end_harvest_date: date
-    harvest_amount: float
-    moisture_content: Optional[float] = None
-    problems_found: Optional[str] = None
+    operator_name: Optional[str] = None      # ผู้ทำกิจกรรม
+    activity_date: date                      # วันที่ทำกิจกรรม
+    start_harvest_date: date                 # วันที่เริ่มการเก็บเกี่ยว
+    end_harvest_date: date                   # วันที่สิ้นสุดการเก็บเกี่ยว
+    harvest_amount: float                    # ผลการผลิต (กิโลกรัม)
+    moisture_content: Optional[float] = None # ความชื้น (%)
+    problems_found: Optional[str] = None     # ปัญหาที่พบ
 
     class Config:
         from_attributes = True
@@ -190,21 +191,6 @@ class DashboardWorkItem(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     resolved_at = Column(DateTime(timezone=True))
-
-class TrackingAdvice(Base):
-    __tablename__ = "tracking_advices"
-    
-    id = Column(SqlUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    activity_event_id = Column(SqlUUID(as_uuid=True), ForeignKey("activity_events.id", ondelete="CASCADE"))
-    user_id = Column(SqlUUID(as_uuid=True), ForeignKey("users.id"))
-    plot_id = Column(SqlUUID(as_uuid=True), ForeignKey("plots.id"))
-    
-    advice_message = Column(Text, nullable=False)
-    advice_status = Column(String(50), default="sent")
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    read_at = Column(DateTime(timezone=True))
 
 class AdminActivityLog(Base):
     __tablename__ = "admin_activity_logs"
@@ -281,139 +267,119 @@ class CreatePlotAndPlanRequest(BaseModel):
     expected_harvest_date: Optional[date] = None
     # 🚩 ปรับให้เป็น Optional หรือใส่ Default เป็น 0 เพื่อรับค่าจาก parseInt(..., 10) || 0
     area_rai: int = 0 
+    area_ngan: int = 0
     area_sq_wa: int = 0
+    area_sq_meter: int = 0
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-# 2. เพิ่ม API Route สำหรับสร้างข้อมูลแบบรวดเดียว
-@app.post("/plans/integrated", status_code=status.HTTP_201_CREATED)
-def create_plot_and_plan(data: CreatePlotAndPlanRequest, db: Session = Depends(get_db)):
-    # ... (ส่วนเช็คพันธุ์ข้าวคงเดิม) ...
+class CreatePlanForExistingPlotRequest(BaseModel):
+    plot_id: UUID
+    season_type: str
+    planting_type: str
+    rice_id: UUID
+    start_date: date
+    expected_harvest_date: Optional[date] = None
+
+@app.post("/plans/for-existing-plot", status_code=status.HTTP_201_CREATED)
+def create_plan_for_existing_plot(data: CreatePlanForExistingPlotRequest, db: Session = Depends(get_db)):
+    plot = db.query(models.Plot).filter(models.Plot.id == data.plot_id).first()
+    if not plot:
+        raise HTTPException(status_code=404, detail="ไม่พบแปลงนา")
+
     variety = db.query(models.RiceVariety).filter(models.RiceVariety.id == data.rice_id).first()
     if not variety:
-        raise HTTPException(status_code=404, detail="ไม่พบข้อมูลพันธุ์ข้าวที่เลือก")
-    # 🌟 แก้ไขตอนสร้าง new_plot ให้รับค่า latitude/longitude
-    new_plot = models.Plot(
-        user_id=data.user_id,
-        farm_id=f"FARM-{uuid.uuid4().hex[:6].upper()}", 
-        plot_name=data.plot_name, 
-        latitude=data.latitude,    # เก็บค่า Lat
-        longitude=data.longitude,  # เก็บค่า Lng
-        area_rai=data.area_rai,
-        area_sq_wa=data.area_sq_wa,
-        status="ACTIVE"
-    )
-    db.add(new_plot)
-    db.flush()
-    # คำนวณวันเก็บเกี่ยว (หากหน้าบ้านไม่ได้ส่งมา)
+        raise HTTPException(status_code=404, detail="ไม่พบพันธุ์ข้าวที่เลือก")
+
     expected_harvest = data.expected_harvest_date
     if not expected_harvest:
         expected_harvest = data.start_date + timedelta(days=variety.grow_duration_days)
 
-    # บันทึกแผนการปลูก (PlantingPlan)
     new_plan = models.PlantingPlan(
-        plot_id=new_plot.id,
+        plot_id=data.plot_id,
         rice_id=data.rice_id,
         season_type=data.season_type,
-        planting_type=data.planting_type, 
+        planting_type=data.planting_type,
         start_date=data.start_date,
         expected_harvest_date=expected_harvest,
         status="ACTIVE"
     )
-    db.add(new_plan)
-    db.commit()
-    
-    return {
-        "message": "สร้างแปลงนาและแผนการปลูกสำเร็จ!",
-        "plot_id": str(new_plot.id),
-        "plan_id": str(new_plan.id)
-    }
-# 🌟 1. เพิ่ม Route บันทึกการเตรียมดิน (แก้ไขปัญหา 404)
-@app.post("/activities/soil-prep", status_code=status.HTTP_201_CREATED)
-def save_soil_prep_activity(data: SoilPrepRequest, db: Session = Depends(get_db)):
-    """API สำหรับบันทึกการเตรียมดิน"""
-    new_event = models.ActivityEvent(
-        plan_id=data.plan_id,
-        type_id=1, 
-        performed_by_name=data.performed_by_name,
-        sequence_no=data.sequence_no,
-        performed_at=data.performed_at,
-        issue_found=data.issue_found,
-        status="DONE"
-    )
-    db.add(new_event)
-    db.commit()
-    return {"message": "บันทึกการเตรียมดินสำเร็จ"}
+    try:
+        db.add(new_plan)
+        db.commit()
+        db.refresh(new_plan)
+        return {"message": "สร้างแผนการปลูกสำเร็จ!", "plan_id": str(new_plan.id), "plot_id": str(data.plot_id)}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/activities/water-management", status_code=status.HTTP_201_CREATED)
-def save_water_management_activity(data: WaterManagementRequest, db: Session = Depends(get_db)):
-    new_event = models.ActivityEvent(
-        plan_id=data.plan_id,
-        type_id=2, 
-        performed_by_name=data.performed_by_name,
-        sequence_no=data.sequence_no,
-        performed_at=data.performed_at,
-        issue_found=data.issue_found,
-        status="DONE"
-    )
-    db.add(new_event)
-    db.commit()
-    return {"message": "บันทึกการจัดการน้ำสำเร็จ"}
+# 2. เพิ่ม API Route สำหรับสร้างข้อมูลแบบรวดเดียว
+@app.post("/plans/integrated", status_code=status.HTTP_201_CREATED)
+def create_plot_and_plan(data: CreatePlotAndPlanRequest, db: Session = Depends(get_db)):
+    try:
+        variety = db.query(models.RiceVariety).filter(models.RiceVariety.id == data.rice_id).first()
+        if not variety:
+            raise HTTPException(status_code=404, detail="ไม่พบข้อมูลพันธุ์ข้าวที่เลือก")
 
-@app.post("/activities/fertilizer", status_code=status.HTTP_201_CREATED)
-def save_fertilizer_activity(data: FertilizerRequest, db: Session = Depends(get_db)):
-    new_event = models.ActivityEvent(
-        plan_id=data.plan_id,
-        type_id=3, 
-        performed_by_name=data.performed_by_name,
-        sequence_no=data.sequence_no,
-        performed_at=data.performed_at,
-        issue_found=data.issue_found,
-        status="DONE"
-    )
-    db.add(new_event)
-    db.commit()
-    return {"message": "บันทึกการใส่ปุ๋ยสำเร็จ"}
+        new_plot = models.Plot(
+            user_id=data.user_id,
+            farm_id=f"FARM-{uuid.uuid4().hex[:6].upper()}", 
+            plot_name=data.plot_name, 
+            latitude=data.latitude,
+            longitude=data.longitude,
+            area_rai=data.area_rai,
+            area_ngan=data.area_ngan,
+            area_sq_wa=data.area_sq_wa,
+            area_sq_meter=data.area_sq_meter,
+            status="ACTIVE"
+        )
+        db.add(new_plot)
+        db.flush() # ดึง ID มาให้ new_plan
+
+        expected_harvest = data.expected_harvest_date
+        if not expected_harvest:
+            expected_harvest = data.start_date + timedelta(days=variety.grow_duration_days)
+
+        new_plan = models.PlantingPlan(
+            plot_id=new_plot.id,
+            rice_id=data.rice_id,
+            season_type=data.season_type,
+            planting_type=data.planting_type, 
+            start_date=data.start_date,
+            expected_harvest_date=expected_harvest,
+            status="ACTIVE"
+        )
+        db.add(new_plan)
+        
+        db.commit() # 🚩 ยืนยันการบันทึก
+        db.refresh(new_plot) # 🚩 อัปเดตค่าจาก DB กลับมาที่ Python
+        db.refresh(new_plan)
+
+        print(f"--- บันทึกสำเร็จ: Plot ID {new_plot.id} ---") # เช็คใน Terminal
+
+        return {
+            "message": "สร้างแปลงนาและแผนการปลูกสำเร็จ!",
+            "plot_id": str(new_plot.id),
+            "plan_id": str(new_plan.id),
+            "plot_name": new_plot.plot_name # ส่งกลับไปเช็คที่หน้าบ้านด้วย
+        }
+
+    except Exception as e:
+        db.rollback() # 🚩 ถ้าพังให้ถอยกลับ ป้องกันข้อมูลค้าง
+        print(f"เกิดข้อผิดพลาด: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- 🚀 บันทึกกิจกรรม (Activities) ---
-
-@app.post("/activities/pest-control", status_code=status.HTTP_201_CREATED)
-def save_pest_activity(data: PestControlRequest, db: Session = Depends(get_db)):
-    """บันทึกศัตรูพืช หรือ โรคพืช โดยใช้ ID ที่ส่งมาจาก Frontend"""
-    new_event = models.ActivityEvent(
-        plan_id=data.plan_id, type_id=data.type_id, performed_by_name=data.performed_by_name,
-        sequence_no=data.sequence_no, performed_at=data.performed_at, issue_found=data.issue_found, status="DONE"
-    )
-    db.add(new_event); db.commit()
-    return {"message": "บันทึกสำเร็จ"}
 
 @app.post("/activities/harvest", status_code=status.HTTP_201_CREATED)
 def save_harvest_activity(data: HarvestSchema, db: Session = Depends(get_db)):
     """บันทึกการเก็บเกี่ยว (กำหนด ID เป็น 5)"""
     new_event = models.ActivityEvent(
-        plan_id=data.plan_id, type_id=6, performed_by_name=data.performed_by_name,
+        plan_id=data.plan_id, type_id=6, performed_by_name=data.operator_name,
         performed_at=data.performed_at, issue_found=data.issue_found, status="DONE"
     )
     db.add(new_event); db.commit()
     return {"message": "บันทึกการเก็บเกี่ยวสำเร็จ"}
-
-@app.post("/activities/sale", status_code=status.HTTP_201_CREATED)
-def save_sale_activity(data: SaleRequest, db: Session = Depends(get_db)):
-    """บันทึกการขายข้าวพร้อมรายละเอียดครบถ้วน"""
-    
-    # รวมรายละเอียดเพิ่มเติมเพื่อบันทึกใน issue_found หรือ Column ที่เกี่ยวข้อง
-    full_detail = f"เวลา: {data.sale_time} | รายละเอียดรถ: {data.car_details} | {data.issue_found or ''}"
-    
-    new_event = models.ActivityEvent(
-        plan_id=data.plan_id,
-        type_id=7, # ID สำหรับการขายข้าว 
-        performed_by_name=data.performed_by_name,
-        performed_at=data.performed_at,
-        issue_found=full_detail, # 🌟 เก็บข้อมูลเพิ่มเติมไว้ที่นี่
-        status="DONE"
-    )
-    db.add(new_event)
-    db.commit()
-    return {"message": "บันทึกข้อมูลการขายข้าวสำเร็จ"}
 
 # ==========================================
 # 11. คำนวณความคืบหน้า (Progress Bar อัปเดตใหม่ 🌟)
@@ -452,11 +418,13 @@ def get_plan_history(plan_id: UUID, db: Session = Depends(get_db)):
     history = db.query(models.ActivityEvent, models.ActivityType.name_th).join(
         models.ActivityType, models.ActivityEvent.type_id == models.ActivityType.id
     ).filter(
-        models.ActivityEvent.plan_id == plan_id, models.ActivityEvent.status == "DONE"
+        models.ActivityEvent.plan_id == plan_id, 
+        models.ActivityEvent.status == "DONE"
     ).order_by(models.ActivityEvent.performed_at.desc()).all()
 
     return [{
         "id": str(e.id), 
+        "type_id": e.type_id,  # 🚩 เพิ่มบรรทัดนี้เข้าไปครับ!
         "activity_name": n, 
         "performed_at": e.performed_at.strftime("%d %b %Y"), 
         "operator": e.performed_by_name or "ไม่ระบุ", 
@@ -465,25 +433,113 @@ def get_plan_history(plan_id: UUID, db: Session = Depends(get_db)):
 
 @app.get("/tracking/active-plans/{user_id}")
 def get_active_plans(user_id: UUID, db: Session = Depends(get_db)):
-    # เพิ่มการ filter plot.status == "ACTIVE" เข้าไปด้วย
-    active_plans = db.query(models.PlantingPlan, models.Plot).join(
+    # Query 1: plot ที่มี active plan
+    with_plans = db.query(models.PlantingPlan, models.Plot).join(
         models.Plot, models.PlantingPlan.plot_id == models.Plot.id
     ).filter(
-        models.Plot.user_id == user_id, 
+        models.Plot.user_id == user_id,
         models.PlantingPlan.status == "ACTIVE",
-        models.Plot.status == "ACTIVE"  # 🚩 เช็คสถานะแปลงนาด้วย
+        models.Plot.status == "ACTIVE"
     ).all()
 
-    # ตรวจสอบว่ามีข้อมูลไหม (เอาไว้ดูใน Terminal ตอนรัน)
-    print(f"📊 พบแผนการปลูกของ User {user_id}: {len(active_plans)} รายการ")
+    result = []
+    plan_plot_ids = set()
 
-    return [{
-        "id": str(plan.id), 
-        "plot_name": plot.plot_name or "ไม่ระบุชื่อแปลง",
-        "area": f"{plot.area_rai} ไร่ {plot.area_sq_wa} ตร.ว.",
-        "location": "ประเทศไทย", 
-        "image": "/rice1.jpg"
-    } for plan, plot in active_plans]
+    for plan, plot in with_plans:
+        plan_plot_ids.add(str(plot.id))
+        result.append({
+            "id": str(plan.id),
+            "plot_id": str(plot.id),
+            "plan_id": str(plan.id),
+            "has_plan": True,
+            "farm_id": plot.farm_id,
+            "plot_name": plot.plot_name or "ไม่ระบุชื่อแปลง",
+            "area_rai": plot.area_rai,
+            "area_ngan": plot.area_ngan,
+            "area_sq_wa": plot.area_sq_wa,
+            "area_sq_meter": plot.area_sq_meter,
+            "location": plot.address or "ประเทศไทย",
+            "image": "/rice1.jpg"
+        })
+
+    # Query 2: plot ที่ admin สร้างแต่ยังไม่มีแผน
+    all_plots = db.query(models.Plot).filter(
+        models.Plot.user_id == user_id,
+        models.Plot.status == "ACTIVE"
+    ).all()
+
+    for plot in all_plots:
+        if str(plot.id) not in plan_plot_ids:
+            result.append({
+                "id": str(plot.id),
+                "plot_id": str(plot.id),
+                "plan_id": None,
+                "has_plan": False,
+                "farm_id": plot.farm_id,
+                "plot_name": plot.plot_name or "ไม่ระบุชื่อแปลง",
+                "area_rai": plot.area_rai,
+                "area_ngan": plot.area_ngan,
+                "area_sq_wa": plot.area_sq_wa,
+                "area_sq_meter": plot.area_sq_meter,
+                "location": plot.address or "ประเทศไทย",
+                "image": "/rice1.jpg"
+            })
+
+    return result
+
+@app.get("/plots/map/{user_id}")
+def get_user_plots_for_map(user_id: UUID, db: Session = Depends(get_db)):
+    """คืนข้อมูลแปลงทั้งหมดของ user พร้อมพิกัดและข้อมูลแผนปลูก (สำหรับหน้าแผนที่)"""
+    plots = db.query(models.Plot).filter(
+        models.Plot.user_id == user_id,
+        models.Plot.status == "ACTIVE"
+    ).all()
+
+    result = []
+    for plot in plots:
+        lat = float(plot.latitude or plot.lat or 0)
+        lng = float(plot.longitude or plot.lon or 0)
+
+        # ดึงแผนปลูก ACTIVE ล่าสุด
+        active_plan = db.query(models.PlantingPlan).filter(
+            models.PlantingPlan.plot_id == plot.id,
+            models.PlantingPlan.status == "ACTIVE"
+        ).order_by(models.PlantingPlan.start_date.desc()).first()
+
+        rice_name = None
+        start_date = None
+        harvest_date = None
+        season_type = None
+
+        if active_plan:
+            rice = db.query(models.RiceVariety).filter(
+                models.RiceVariety.id == active_plan.rice_id
+            ).first()
+            rice_name = rice.name if rice else None
+            start_date = active_plan.start_date.strftime("%d/%m/%Y") if active_plan.start_date else None
+            harvest_date = active_plan.expected_harvest_date.strftime("%d/%m/%Y") if active_plan.expected_harvest_date else None
+            season_type = active_plan.season_type
+
+        result.append({
+            "plot_id": str(plot.id),
+            "farm_id": plot.farm_id,
+            "plot_name": plot.plot_name or "ไม่ระบุชื่อ",
+            "lat": lat,
+            "lng": lng,
+            "has_location": lat != 0 and lng != 0,
+            "area_rai": plot.area_rai or 0,
+            "area_ngan": plot.area_ngan or 0,
+            "area_sq_wa": plot.area_sq_wa or 0,
+            "has_plan": active_plan is not None,
+            "plan_id": str(active_plan.id) if active_plan else None,
+            "rice_name": rice_name,
+            "season_type": season_type,
+            "start_date": start_date,
+            "harvest_date": harvest_date,
+        })
+
+    return result
+
 @app.get("/master/rice-varieties")
 def get_rice_varieties(db: Session = Depends(get_db)):
     return db.query(models.RiceVariety).all()
@@ -556,43 +612,56 @@ def get_notifications(user_id: UUID, db: Session = Depends(get_db)):
     notifications = []
 
     for plan in active_plans:
-        # ดึงมาตรฐานกิจกรรมมาเรียงตามลำดับวัน
         standards = db.query(models.ActivityStandard).filter(
             models.ActivityStandard.rice_variety_id == plan.rice_id
         ).order_by(models.ActivityStandard.days_after_planting.asc()).all()
 
         for std in standards:
             target_date = plan.start_date + timedelta(days=std.days_after_planting)
-            
-            # เช็คว่าทำกิจกรรมนี้หรือยัง
+
             already_done = db.query(models.ActivityEvent).filter(
                 models.ActivityEvent.plan_id == plan.id,
-                models.ActivityEvent.type_id == std.activity_type_id
+                models.ActivityEvent.type_id == std.activity_type_id,
+                models.ActivityEvent.status == "DONE"
             ).first()
 
-            if not already_done:
-                days_diff = (target_date - today).days
-                status_type = "info"
-                title = "📅 แผนงานถัดไป"
-                
-                if days_diff == 0:
-                    status_type = "urgent"
-                    title = "🔔 ถึงกำหนดวันนี้"
-                elif days_diff < 0:
-                    status_type = "warning"
-                    title = "⚠️ เลยกำหนดการ"
+            if already_done:
+                continue
 
-                notifications.append({
-                    "id": str(uuid.uuid4()),
-                    "plot_id": str(plan.plot_id),
-                    "target_type": str(std.activity_type_id),
-                    "title": title,
-                    "message": f"กิจกรรมถัดไป: {std.description} ที่แปลง {plan.plot.plot_name}",
-                    "type": status_type,
-                    "due_date": target_date.strftime("%d/%m/%Y"),
-                    "days_left": days_diff
-                })
-                break 
+            days_diff = (target_date - today).days
+
+            # ไม่แสดงกิจกรรมที่ยังเหลือเวลามากกว่า 7 วัน
+            if days_diff > 7:
+                break
+
+            if days_diff <= -7:
+                noti_type = "urgent"
+                title = f"🚨 ลืมบันทึก! เลยกำหนดมา {abs(days_diff)} วันแล้ว"
+            elif days_diff < 0:
+                noti_type = "warning"
+                title = f"⚠️ เลยกำหนด {abs(days_diff)} วัน — รีบบันทึกด้วยนะ"
+            elif days_diff == 0:
+                noti_type = "urgent"
+                title = "🔔 ถึงกำหนดวันนี้ — อย่าลืมบันทึก!"
+            elif days_diff <= 3:
+                noti_type = "warning"
+                title = f"📅 อีก {days_diff} วันถึงกำหนด — เตรียมตัวด้วย"
+            else:
+                noti_type = "info"
+                title = f"📅 อีก {days_diff} วันถึงกำหนด"
+
+            notifications.append({
+                "id": str(uuid.uuid4()),
+                "plot_id": str(plan.plot_id),
+                "target_type": str(std.activity_type_id),
+                "title": title,
+                "message": f"{std.description} · แปลง {plan.plot.plot_name} · กำหนด {target_date.strftime('%d/%m/%Y')}",
+                "type": noti_type,
+                "due_date": target_date.strftime("%d/%m/%Y"),
+                "days_left": days_diff,
+                "is_read": False,
+            })
+            break
 
     # 🚩 ย้ายออกมาไว้ข้างนอกลูป (ให้ตรงกับระดับแนวตั้งของ 'for plan in active_plans')
     db_notifs = db.query(models.Notification).filter(
@@ -605,10 +674,122 @@ def get_notifications(user_id: UUID, db: Session = Depends(get_db)):
             "title": n.title,
             "message": n.message,
             "type": "info",
+            "is_read": n.is_read,
             "created_at": n.created_at.strftime("%d/%m/%Y %H:%M") if n.created_at else ""
         })
 
+    # ดึงคำแนะนำจาก Admin (TrackingAdvice) ผ่าน activity_event_id ของ user
+    user_activity_ids = [
+        str(e.id) for e in db.query(models.ActivityEvent.id)
+        .join(models.PlantingPlan, models.ActivityEvent.plan_id == models.PlantingPlan.id)
+        .join(models.Plot, models.PlantingPlan.plot_id == models.Plot.id)
+        .filter(models.Plot.user_id == user_id)
+        .all()
+    ]
+
+    if user_activity_ids:
+        advices = db.query(
+            models.TrackingAdvice.id,
+            models.TrackingAdvice.advice_message,
+            models.TrackingAdvice.activity_event_id,
+            models.TrackingAdvice.advice_status,
+            models.TrackingAdvice.page_title,
+            models.TrackingAdvice.farmer_name,
+        ).filter(
+            models.TrackingAdvice.activity_event_id.in_(user_activity_ids),
+            models.TrackingAdvice.advice_status.in_(["sent", "read"])
+        ).all()
+
+        # resolve plot_id และ type_id จาก activity_event_id แบบ batch
+        act_uuids = []
+        for adv in advices:
+            try:
+                if adv.activity_event_id:
+                    act_uuids.append(uuid.UUID(adv.activity_event_id))
+            except (ValueError, AttributeError):
+                pass
+
+        activity_info = {}
+        if act_uuids:
+            rows = db.query(
+                models.ActivityEvent.id,
+                models.ActivityEvent.type_id,
+                models.PlantingPlan.plot_id,
+                models.Plot.plot_name,
+            ).join(
+                models.PlantingPlan, models.ActivityEvent.plan_id == models.PlantingPlan.id
+            ).join(
+                models.Plot, models.PlantingPlan.plot_id == models.Plot.id
+            ).filter(models.ActivityEvent.id.in_(act_uuids)).all()
+            for r in rows:
+                activity_info[str(r.id)] = {
+                    "plot_id": str(r.plot_id),
+                    "type_id": str(r.type_id),
+                    "plot_name": r.plot_name or "",
+                }
+
+        for adv in advices:
+            info = activity_info.get(adv.activity_event_id or "", {})
+            notifications.append({
+                "id": str(adv.id),
+                "title": "💡 คำแนะนำจากเจ้าหน้าที่",
+                "message": adv.advice_message or "",
+                "type": "advice",
+                "is_read": adv.advice_status == "read",
+                "created_at": "",
+                "plot_id": info.get("plot_id"),
+                "target_type": info.get("type_id"),
+                "plot_name": info.get("plot_name") or "",
+                "activity_title": adv.page_title or "",
+                "farmer_name": adv.farmer_name or "",
+            })
+
     return notifications
+
+
+@app.delete("/notifications/{noti_id}")
+def delete_notification(noti_id: str, db: Session = Depends(get_db)):
+    try:
+        db.query(models.Notification).filter(
+            models.Notification.id == int(noti_id)
+        ).delete(synchronize_session=False)
+        db.commit()
+        return {"status": "deleted"}
+    except ValueError:
+        pass
+    try:
+        db.query(models.Notification).filter(
+            models.Notification.id == noti_id
+        ).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        pass
+    return {"status": "deleted"}
+
+@app.patch("/notifications/{noti_id}/read")
+def mark_notification_read(noti_id: str, db: Session = Depends(get_db)):
+    # Try UUID → Notification table (admin reply notifications)
+    try:
+        notif = db.query(models.Notification).filter(
+            models.Notification.id == uuid.UUID(noti_id)
+        ).first()
+        if notif:
+            notif.is_read = True
+            db.commit()
+            return {"status": "ok"}
+    except (ValueError, Exception):
+        pass
+
+    # Try UUID → TrackingAdvice table
+    try:
+        db.query(models.TrackingAdvice).filter(
+            models.TrackingAdvice.id == uuid.UUID(noti_id)
+        ).update({"advice_status": "read"}, synchronize_session=False)
+        db.commit()
+    except (ValueError, Exception):
+        pass
+
+    return {"status": "ok"}
 @app.get("/dashboard/main/{user_id}")
 def get_main_dashboard(user_id: UUID, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -698,18 +879,32 @@ def create_issue(
                 shutil.copyfileobj(image.file, buffer)
             image_url = f"/static/uploads/{filename}"
 
-        # บันทึกลง Database
+        # ดึงเบอร์โทรของผู้ใช้เพื่อแสดงใน admin
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        contact_phone = getattr(user, "phone", None) if user else None
+
+        # บันทึกลง issue_reports (เดิม)
         new_issue = models.IssueReport(
             user_id=user_id,
-            title=issue_type,      # เอา issue_type มาใส่ช่อง title
-            description=details,   # เอา details มาใส่ช่อง description
+            title=issue_type,
+            description=details,
             status="PENDING"
-            # image_url=image_url  # ถ้าใน Model มีช่องเก็บรูป ให้ใส่ตรงนี้ด้วย
         )
         db.add(new_issue)
+
+        # บันทึกลง support_tickets เพื่อให้ admin panel เห็น
+        new_ticket = models.SupportTicket(
+            user_id=user_id,
+            subject=issue_type,
+            message=details,
+            contact_phone=contact_phone,
+            status="PENDING"
+        )
+        db.add(new_ticket)
+
         db.commit()
         db.refresh(new_issue)
-        
+
         return {"status": "success", "id": str(new_issue.id)}
         
     except Exception as e:
@@ -786,27 +981,131 @@ async def upload_profile(user_id: UUID, file: UploadFile = File(...), db: Sessio
     
     return {"image_url": profile.profile_image_url}
 
-# api.py
+# ใน api.py
 @app.post("/activities/save", status_code=status.HTTP_201_CREATED)
-def save_activity_universal(data: schemas.ActivitySaveRequest, db: Session = Depends(get_db)):
-    # สร้าง Event ใหม่ในฐานข้อมูล
-    new_event = models.ActivityEvent(
-        plan_id=data.plan_id,
-        type_id=data.type_id, # รับ ID ตามประเภทกิจกรรมที่ส่งมา (1, 2, 3...)
-        performed_by_name=data.performed_by_name,
-        performed_at=data.performed_at,
-        sequence_no=data.sequence_no,
-        issue_found=data.issue_found,
-        status="DONE"
-    )
-    
-    # ถ้ามีข้อมูลเฉพาะส่วน (เช่น ค่า pH ดิน) ก็บันทึกเพิ่ม (หาก Model รองรับ)
-    # หรือจะรวมรายละเอียดทั้งหมดไว้ใน issue_found ก็ได้
-    
-    db.add(new_event)
-    db.commit()
-    db.refresh(new_event)
-    return {"message": "บันทึกกิจกรรมสำเร็จ", "id": str(new_event.id)}
+async def save_activity_universal(data: schemas.ActivitySaveRequest, db: Session = Depends(get_db)):
+    try:
+        # 1. บันทึกลงตารางหลัก activity_events
+        new_event = models.ActivityEvent(
+            plan_id=data.plan_id,
+            type_id=data.type_id,
+            performed_by_name=data.operator_name,
+            performed_at=data.activity_date,
+            # 🚩 เปลี่ยนจาก issue_found เป็น problems_found ตาม Payload
+            issue_found=data.problems_found if hasattr(data, 'problems_found') else data.issue_found,
+            status="DONE" 
+        )
+        db.add(new_event)
+        db.flush()  # เพื่อให้ได้ new_event.id มาใช้ในตารางลูก
+
+        # 2. บันทึกรายละเอียดตามประเภทกิจกรรม (ตารางลูก)
+        
+        # --- กรณีเตรียมดิน (type_id = 1) ---
+        if data.type_id == 1:
+            soil_detail = models.SoilPrepDetail(
+                activity_id=new_event.id,
+                straw_burning=data.straw_burning,
+                land_leveling=data.land_leveling,
+                soil_ph=data.soil_ph,
+                soil_npk=data.soil_npk,
+                organic_matter=data.soil_organic
+            )
+            db.add(soil_detail)
+
+        # --- กรณีการจัดการน้ำ (type_id = 2) ---
+        elif data.type_id == 2:
+            water_detail = models.WaterMgmtDetail(
+                activity_id=new_event.id,
+                method="เปียกสลับแห้ง(AWD)",
+                water_level_cm=data.water_level if data.water_level else "ไม่ได้ระบุ",
+                ref_point="-",
+                note=data.problems_found if hasattr(data, 'problems_found') else data.issue_found
+            )
+            db.add(water_detail)
+
+        # --- กรณีการหว่านปุ๋ย (type_id = 3) ---
+        elif data.type_id == 3:
+            # ตรวจสอบว่ามีค่า amount ส่งมาหรือไม่เพื่อป้องกันการแปลง float พัง
+            val_amount = 0.0
+            if data.amount and str(data.amount).replace('.', '', 1).isdigit():
+                val_amount = float(data.amount)
+
+            fertilizer_detail = models.FertilizationDetail(
+                activity_id=new_event.id,
+                fertilizer_kind="ปุ๋ยเคมี", 
+                fertilizer_formula=data.fertilizer_type, # ใน Payload fertilizer_type คือสูตร เช่น 16-20-0
+                qty_kg_per_rai=val_amount
+            )
+            db.add(fertilizer_detail) # ✅ ย่อหน้าอยู่ภายใต้ if ของตัวเองเท่านั้น
+        
+        # --- กรณีการจัดการศัตรูพืช (type_id = 4) ---
+        elif data.type_id == 4:  # จัดการศัตรูพืช
+    # 🚩 ดึงค่าจาก data ที่ผ่านการตรวจสอบจาก ActivityCreate มาแล้ว
+            chem_name = data.chemical_common_name 
+            chem_amount = data.amount_used
+            water_detail = data.water_liters
+
+            detail = models.PestControlDetail(
+                activity_id=new_event.id,
+                pest_type=data.pest_type if data.pest_type else "ไม่ระบุชนิด",
+                # 🚩 ฝั่งซ้ายคือชื่อคอลัมน์ใน DB (chemical_common_name)
+                # 🚩 ฝั่งขวาคือตัวแปรที่เราดึงมาตะกี้ (chem_name)
+                chemical_common_name=chem_name if chem_name else "ไม่ระบุชื่อยา", 
+                amount_used=float(chem_amount) if chem_amount else 0.0,
+                water_liters=float(water_detail) if water_detail else 0.0
+            )
+            db.add(detail)
+        elif data.type_id == 5:  # โรคพืช
+            disease_val = data.disease_name or data.disease_type or "ไม่ระบุชื่อโรค"
+            chem_name = data.chemical_name or data.chemical_common_name or data.chemical_comm_name or "ไม่ระบุชื่อยา"
+            chem_amount = data.chemical_amount or data.amount_used or 0.0
+            ratio = data.water_liter or data.water_liters or 0.0
+
+            detail = models.DiseaseControlDetail(
+                activity_id=new_event.id,
+                disease_type=disease_val,
+                chemical_comm_name=chem_name,
+                amount_used=float(chem_amount) if chem_amount else 0.0,
+                water_liters=float(ratio) if ratio else 0.0
+            )
+            db.add(detail)
+
+        elif data.type_id == 6:  # การเก็บเกี่ยว
+            detail = models.HarvestDetail(
+                activity_id=new_event.id,
+                # 🚩 ฝั่งซ้ายคือชื่อใน pgAdmin | ฝั่งขวาคือชื่อใน Schemas
+                harvest_start_date=data.harvest_start_date,
+                harvest_end_date=data.harvest_end_date,
+                total_yield_kg=float(data.total_yield_kg) if data.total_yield_kg else 0.0,
+                moisture_percent=float(data.moisture_percent) if data.moisture_percent else 0.0,
+                operator_name=data.operator_name,
+                problems_found=data.problems_found
+            )
+            db.add(detail)
+        elif data.type_id == 7:
+            sale_detail = models.SaleDetail(
+                activity_id=new_event.id,
+                sale_date=data.sale_date if data.sale_date else None,
+                mill_name=data.mill_name,
+                product_name=data.product_name,
+                ticket_no=data.ticket_no,
+                plate_no=data.plate_no,
+                weight_total_kg=data.total_weight,
+                weight_net_kg=data.net_weight_kg,
+                price_per_kg=data.price_per_kg,
+                total_income=data.total_income
+            )
+            db.add(sale_detail)
+        # 3. ยืนยันการบันทึกจริงลง pgAdmin
+        db.commit() 
+        db.refresh(new_event)
+        
+        return {"message": "บันทึกกิจกรรมสำเร็จ", "id": str(new_event.id)}
+
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error: {e}") 
+        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
 
 @app.post("/admin/respond-issue/{issue_id}")
 def admin_respond(issue_id: UUID, response_text: str, db: Session = Depends(get_db)):
@@ -830,40 +1129,34 @@ def admin_respond(issue_id: UUID, response_text: str, db: Session = Depends(get_
     db.commit()
     return {"message": "ส่งคำตอบและแจ้งเตือนสำเร็จ"}
 
-# บรรทัดที่ 839 เป็นต้นไป
 @app.post("/harvest/save")
 def save_harvest(data: HarvestSchema, db: Session = Depends(get_db)):
     try:
-        # สร้าง Object สำหรับบันทึกลงตาราง harvests ใน Database
-        new_harvest = models.Harvest(
+        new_event = models.ActivityEvent(
             plan_id=data.plan_id,
-            plot_id=data.plot_id,
-            operator_name=data.operator_name,
-            activity_date=data.activity_date,
-            start_date=data.start_harvest_date,
-            end_date=data.end_harvest_date,
-            amount=data.harvest_amount,
-            moisture=data.moisture_content,
-            problems=data.problems_found
+            type_id=6, 
+            performed_by_name=data.operator_name, # ✅ ต้องใช้ operator_name ตาม Schema
+            performed_at=data.activity_date,      # ✅ ต้องใช้ activity_date ตาม Schema
+            status="DONE"
         )
-        
-        db.add(new_harvest)
-        
-        # ค้นหาแผนการปลูกเพื่อเปลี่ยนสถานะเป็น COMPLETED (สิ้นสุดรอบการปลูก)
-        plan = db.query(models.PlantingPlan).filter(models.PlantingPlan.id == data.plan_id).first()
-        if plan:
-            plan.status = "COMPLETED"
-            
-        db.commit() # บันทึกข้อมูลลง Disk
-        db.refresh(new_harvest) # ดึงข้อมูลที่เพิ่งบันทึกกลับมาเพื่อยืนยัน ID
-        
-        return {"status": "success", "message": "บันทึกข้อมูลการเก็บเกี่ยวสำเร็จ"}
-        
-    except Exception as e:
-        db.rollback() # ถ้าพังให้ถอยกลับ (ป้องกันข้อมูลขยะ)
-        print(f"❌ เกิดข้อผิดพลาด: {str(e)}")
-        raise HTTPException(status_code=500, detail="ไม่สามารถบันทึกได้ กรุณาเช็คคอลัมน์ใน models.py")
+        db.add(new_event)
+        db.flush() 
 
+        # สร้างรายละเอียด (ลงตาราง harvest_details ใน pgAdmin)
+        new_harvest = models.HarvestDetail(
+            activity_id=new_event.id, # 🚩 ต้องใช้ ID จาก Event
+            harvest_start_date=data.start_harvest_date,
+            harvest_end_date=data.end_harvest_date,
+            total_yield_kg=data.harvest_amount,
+            moisture_percent=data.moisture_content
+        )
+        db.add(new_harvest)
+        db.commit() # 🚩 ห้ามลืมเด็ดขาด!
+        return {"status": "success"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @app.get("/reports/history/{user_id}")
 def get_issue_history(user_id: UUID, db: Session = Depends(get_db)):
     # ดึงข้อมูลการแจ้งปัญหาทั้งหมดของ User นี้ เรียงจากใหม่ไปเก่า
@@ -879,3 +1172,112 @@ def get_issue_history(user_id: UUID, db: Session = Depends(get_db)):
         "image_url": f"http://localhost:8000{issue.image_url}" if issue.image_url else None,
         "date": issue.created_at.strftime("%d %b %Y %H:%M")
     } for issue in issues]
+    
+@app.get("/tracking/plan/{plan_id}/available-activities")
+def get_available_activities(plan_id: UUID, db: Session = Depends(get_db)):
+    # 1. หาแผนการปลูกเพื่อดูว่าใช้พันธุ์ข้าว (rice_id) อะไร
+    plan = db.query(models.PlantingPlan).filter(models.PlantingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="ไม่พบแผนการปลูก")
+
+    # 2. ดึงรายการกิจกรรมมาตรฐานจาก ActivityStandard ที่ผูกกับพันธุ์ข้าวนั้น
+    # โดย Join กับ ActivityType เพื่อเอาชื่อกิจกรรมมาแสดง
+    standards = db.query(
+        models.ActivityStandard.activity_type_id,
+        models.ActivityType.name_th,
+        models.ActivityStandard.days_after_planting
+    ).join(
+        models.ActivityType, 
+        models.ActivityStandard.activity_type_id == models.ActivityType.id
+    ).filter(
+        models.ActivityStandard.rice_variety_id == plan.rice_id
+    ).order_by(models.ActivityStandard.days_after_planting.asc()).all()
+
+    return [
+        {
+            "type_id": s.activity_type_id,
+            "name": s.name_th,
+            "due_days": s.days_after_planting
+        } for s in standards
+    ]
+
+@app.get("/plots", response_model=List[schemas.PlotResponse])
+def get_all_plots(db: Session = Depends(get_db)):
+    # ดึงข้อมูลจากตาราง plots มาทั้งหมด
+    return db.query(models.Plot).all()
+
+@app.get("/tracking/plan/{plan_id}/next-available")
+def get_next_available_activity(plan_id: UUID, db: Session = Depends(get_db)):
+    # 1. ดึงกิจกรรมที่ทำสำเร็จแล้ว (DONE) มาเรียงลำดับตาม type_id ล่าสุด
+    last_event = db.query(models.ActivityEvent).filter(
+        models.ActivityEvent.plan_id == plan_id,
+        models.ActivityEvent.status == "DONE"
+    ).order_by(models.ActivityEvent.type_id.desc()).first()
+
+    # 2. ถ้ายังไม่เคยทำอะไรเลย ให้เริ่มที่กิจกรรมที่ 1 (เตรียมดิน)
+    if not last_event:
+        return {"next_type_id": 1}
+
+    # 3. ถ้าทำถึงกิจกรรมสุดท้ายแล้ว (สมมติ ID คือ 8 การขายข้าว)
+    if last_event.type_id >= 8:
+        return {"next_type_id": None, "message": "เสร็จสิ้นทุกขั้นตอนแล้ว"}
+
+    # 4. ส่งค่า ID ถัดไปกลับไปให้หน้าบ้าน
+    return {"next_type_id": last_event.type_id + 1}
+
+@app.post("/notifications/send")
+async def send_notification(data: dict, db: Session = Depends(get_db)):
+    try:
+        # 1. รับค่าจากที่ Admin ส่งมา (JSON Body)
+        user_id_str = data.get("user_id")
+        title = data.get("title", "แจ้งเตือนจากระบบ")
+        message = data.get("message")
+
+        if not user_id_str or not message:
+            raise HTTPException(status_code=400, detail="Missing user_id or message")
+
+        # 2. สร้างก้อนข้อมูลใหม่ตาม Model ที่เราตั้งไว้
+        new_notif = models.Notification(
+            user_id=uuid.UUID(user_id_str), # แปลง String เป็น UUID
+            title=title,
+            message=message,
+            is_read=False
+        )
+
+        # 3. สั่งบันทึกลงฐานข้อมูล
+        db.add(new_notif)
+        db.commit() # <--- จุดที่ทำให้ข้อมูลไปโผล่ใน pgAdmin
+        db.refresh(new_notif)
+
+        return {"status": "success", "id": str(new_notif.id)}
+    
+    except Exception as e:
+        db.rollback() # ถ้ามีปัญหาให้ยกเลิกการเพิ่มข้อมูล
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/advice/{activity_id}")
+async def get_activity_advice(
+    activity_id: str, 
+    plot_id: str, # 🚩 เพิ่มพารามิเตอร์นี้
+    db: Session = Depends(get_db)
+):
+    # ค้นหาคำแนะนำที่ตรงทั้ง กิจกรรม และ เลขแปลง
+    advice = db.query(models.TrackingAdvice).filter(
+        models.TrackingAdvice.activity_event_id == activity_id,
+        models.TrackingAdvice.plot_id == plot_id, # 🚩 กรองตามเลขแปลง
+        models.TrackingAdvice.advice_status == "sent"
+    ).order_by(models.TrackingAdvice.sent_at.desc()).first()
+
+    if not advice:
+        return {"data": None}
+
+    return {
+        "data": {
+            "message": advice.advice_message,
+            "is_sent": True,
+            "sent_at": advice.sent_at.isoformat() if advice.sent_at else None,
+            "sent_by": advice.sent_by or "แอดมิน",
+            "attachment_url": None
+        }
+    }

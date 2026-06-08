@@ -1,47 +1,49 @@
-# ไฟล์: main.py (เวอร์ชันทดสอบบันทึกแบบครบเครื่อง)
 from database import SessionLocal
-from models import Base, User, Plot, PlantingPlan, ActivityEvent, ActivityType, FertilizationDetail, RiceVariety
+from models import User, Plot, PlantingPlan, ActivityEvent, ActivityType, FertilizationDetail, RiceVariety
 from datetime import date
+import uuid
 
 def test_full_system():
     db = SessionLocal()
     try:
         print("\n🚀 เริ่มทดสอบระบบแบบ Full Option...")
 
-        # 1. สร้าง User (ชาวนา)
+        # 1. สร้าง User (ชาวนา) - อ้างอิงตาม Model User
         farmer = User(
-            email="somchai@rice.com", 
-            full_name="นายสมชาย หมายปอง",
+            username="somchai_farmer", 
+            password_hash="hashed_password",
+            phone="0812345678",
             role="FARMER"
         )
         db.add(farmer)
-        db.commit() # commit เพื่อให้ได้ ID
+        db.commit()
 
-        # 2. สร้างแปลงนา (Plot)
+        # 2. สร้างแปลงนา (Plot) - อ้างอิงตาม Model Plot
         plot = Plot(
-            farmer_user_id=farmer.id,
+            user_id=farmer.id, # เปลี่ยนจาก farmer_user_id ให้ตรง Model
+            farm_id=str(uuid.uuid4())[:8],
             plot_name="แปลงนาทุ่งทอง",
-            area_rai=15.0,
-            area_square_wa=50.0  # <--- ฟิลด์ใหม่
+            area_rai=15,
+            area_sq_wa=50 # ให้ตรงกับ area_sq_wa ใน Model
         )
         db.add(plot)
         db.commit()
 
         # 3. สร้างพันธุ์ข้าว & แผนการปลูก
-        rice = RiceVariety(name="กข43", growth_days_min=95)
+        rice = RiceVariety(name="กข43", grow_duration_days=95)
         db.add(rice)
         db.commit()
 
         plan = PlantingPlan(
             plot_id=plot.id,
-            variety_id=rice.id,
+            rice_id=rice.id,
             season_type="นาปรัง",
             start_date=date.today()
         )
         db.add(plan)
         db.commit()
 
-        # 4. สร้างประเภทกิจกรรม (ใส่ปุ๋ย) - ต้องมี name_th แล้วนะ
+        # 4. สร้างประเภทกิจกรรม
         act_type = ActivityType(code="FERTILIZE", name_th="หว่านปุ๋ย")
         db.add(act_type)
         db.commit()
@@ -51,24 +53,23 @@ def test_full_system():
             plan_id=plan.id,
             type_id=act_type.id,
             performed_at=date.today(),
-            performed_by_name="นายสมชาย หมายปอง", # <--- ฟิลด์ใหม่
+            performed_by_name="นายสมชาย หมายปอง", # ฟิลด์นี้มีใน Model แล้ว
             issue_found="-"
         )
         db.add(event)
-        db.flush() # flush เพื่อเอา event.id มาใช้ก่อน
+        db.flush() 
 
-        # 6. ใส่รายละเอียดปุ๋ย (ฟิลด์ใหม่เพียบ)
+        # 6. ใส่รายละเอียดปุ๋ย - ปรับให้ตรงกับ FertilizationDetail ใน models.py
         detail = FertilizationDetail(
             activity_id=event.id,
-            method="หว่านด้วยคน",           # <--- ตรงตาม UI
-            fertilizer_formula="46-0-0",    # <--- ตรงตาม UI
-            fertilizer_type="เคมี",
+            fertilizer_kind="เคมี",       # เดิมคือ fertilizer_type
+            fertilizer_formula="46-0-0", 
             qty_kg_per_rai=25.5
         )
         db.add(detail)
         db.commit()
 
-        print(f"✅ บันทึกสำเร็จ! ใส่ปุ๋ยสูตร {detail.fertilizer_formula} โดย {event.performed_by_name}")
+        print(f"✅ บันทึกสำเร็จ! ใส่ปุ๋ยสูตร {detail.fertilizer_formula} ในแผน ID: {plan.id}")
 
     except Exception as e:
         print("❌ Error:", e)
