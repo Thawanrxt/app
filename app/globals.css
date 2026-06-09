@@ -58,9 +58,26 @@ body {
   border-radius: 40px;
   overflow: hidden;
   background: #ffffff;
-
   display: flex;
   flex-direction: column;
+}
+
+/* มือถือจริง: เต็มจอ */
+@media (max-width: 480px) {
+  html, body {
+    background: #ffffff;
+  }
+
+  .app-wrapper {
+    align-items: stretch;
+    background: #ffffff;
+  }
+
+  .phone-frame {
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+  }
 }
 
 /* ============================= */
@@ -326,17 +343,6 @@ body {
   justify-content: center;
 }
 
-.phone-frame {
-  width: 100%;
-  max-width: 420px;
-  height: 100vh;
-  background: #f4f9f4;
-  border-radius: 30px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
 /* ===== Policy Card ===== */
 .policy-card {
   background: white;
@@ -415,21 +421,6 @@ body {
   cursor: pointer;
 }
 
-/* ============================= */
-/*        Real Mobile            */
-/* ============================= */
-
-@media (max-width: 480px) {
-  .app-wrapper {
-    align-items: stretch;
-  }
-
-  .phone-frame {
-    width: 100vw;
-    height: 100vh;
-    border-radius: 0;
-  }
-}
 
 
 
